@@ -1,6 +1,7 @@
-#include "Lexer.hpp"
-#include "ErrorRecorder.hpp"
-#include "ErrorType.hpp"
+#include "frontend/lexer/Lexer.hpp"
+#include "frontend/lexer/TokenType.hpp"
+#include "error/ErrorRecorder.hpp"
+#include "error/ErrorType.hpp"
 #include <fstream>
 #include <iostream>
 #include <algorithm>

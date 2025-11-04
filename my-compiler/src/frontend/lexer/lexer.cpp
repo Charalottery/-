@@ -2,7 +2,7 @@
 #include <cctype>
 #include <stdexcept>
 #include <iostream>
-#include "ErrorRecorder.hpp"
+#include "../../error/ErrorRecorder.hpp"
 
 static bool isIdentifierStart(char c) { return std::isalpha(static_cast<unsigned char>(c)) || c == '_'; }
 static bool isIdentifierPart(char c) { return std::isalnum(static_cast<unsigned char>(c)) || c == '_'; }

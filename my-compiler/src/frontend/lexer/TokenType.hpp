@@ -100,4 +100,3 @@ inline TokenType GetTokenType(char c) {
         default: return TokenType::ERROR_T;
     }
 }
-
