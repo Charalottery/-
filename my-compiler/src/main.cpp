@@ -3,6 +3,7 @@
 #include "frontend/lexer/TokenPrinter.hpp"
 #include "error/ErrorRecorder.hpp"
 #include "error/ErrorType.hpp"
+#include "frontend/parser/Parser.hpp"
 #include <fstream>
 #include <iostream>
 #include <algorithm>
@@ -49,11 +50,15 @@ int main() {
     // otherwise write lexer.txt with tokens in reading order (exclude EOF)
     // remove stale error file if exists
     std::remove("error.txt");
-    std::ofstream of("lexer.txt");
-    for (const auto &t : lexer.GetTokenList()) {
-        if (t.type == TokenType::EOF_T) continue;
-        of << TokenTypeToString(t.type) << " " << t.value << "\n";
-    }
+    // build token stream and parse
+    TokenStream ts(lexer.GetTokenList());
+    Parser parser(ts);
+    auto tree = parser.ParseCompUnit();
+
+    // write parser output as post-order traversal of AST
+    std::remove("parser.txt");
+    std::ofstream pf("parser.txt");
+    if (tree) tree->PostOrderPrint(pf);
 
     return 0;
 }
