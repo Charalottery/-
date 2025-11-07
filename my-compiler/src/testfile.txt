@@ -48,11 +48,11 @@ int main()
 	if (0 && func()){
 		;
 	}
-	printf("%d",global_var); // è¾“å‡º 0
+	printf("%d",global_var); // Êä³ö 0
 	if (1 || func()) {
 		;
 	}
-	printf("%d",global_var); // è¾“å‡º 0
+	printf("%d",global_var); // Êä³ö 0
 
 	i = 1;
 	if (i == 1)

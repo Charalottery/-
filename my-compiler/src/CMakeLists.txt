@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.10)
 
 # Project name must be Compiler per submission requirements
-project(Compiler VERSION 0.1 LANGUAGES CXX)
+project(Compiler)
 
 # C++ standard
 set(CMAKE_CXX_STANDARD 17)
@@ -28,6 +28,8 @@ target_include_directories(Compiler PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/frontend/lexer
     ${CMAKE_CURRENT_SOURCE_DIR}/error
+    ${CMAKE_CURRENT_SOURCE_DIR}/frontend/parser
+    ${CMAKE_CURRENT_SOURCE_DIR}/frontend/ast
 )
 
 # Compile options
@@ -37,5 +39,10 @@ else()
     target_compile_options(Compiler PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
-# Ensure the built exe is placed in the src directory for easy testing
-set_target_properties(Compiler PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+# Force the runtime output name to 'Compiler' (on Windows this will produce Compiler.exe)
+# Place the runtime output in the CMake binary directory so building in an out-of-source
+# `build` folder produces `build/Compiler` as the platform expects.
+set_target_properties(Compiler PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}
+    RUNTIME_OUTPUT_NAME "Compiler"
+)
