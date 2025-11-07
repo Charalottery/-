@@ -57,6 +57,7 @@ private:
 
     std::unique_ptr<ASTNode> ParseMulExp();
     std::unique_ptr<ASTNode> ParseAddExp();
+    std::unique_ptr<ASTNode> ParseAddExpPrime();
     std::unique_ptr<ASTNode> ParseRelExp();
     std::unique_ptr<ASTNode> ParseEqExp();
     std::unique_ptr<ASTNode> ParseLAndExp();

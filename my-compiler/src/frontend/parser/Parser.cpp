@@ -22,31 +22,64 @@ Token Parser::Consume() {
 
 std::unique_ptr<ASTNode> Parser::ParseCompUnit() {
     auto node = make_unique<ASTNode>("CompUnit");
-
     // {Decl} {FuncDef} MainFuncDef
+    // Use 2-token pre-read (peek1, peek2) to disambiguate productions that start with the same token
     while (true) {
         Token cur = PeekToken(0);
+        Token pre1 = PeekToken(1);
+        Token pre2 = PeekToken(2);
+
+        // EOF -> stop
+        if (cur.type == TokenType::EOF_T) break;
+
         // detect main function start: 'int' 'main' '('
-        if (cur.type == TokenType::INTTK && PeekToken(1).type == TokenType::MAINTK && PeekToken(2).type == TokenType::LPARENT) {
+        if (cur.type == TokenType::INTTK && pre1.type == TokenType::MAINTK && pre2.type == TokenType::LPARENT) {
             break;
         }
+
+        // const/static always start a declaration
         if (cur.type == TokenType::CONSTTK || cur.type == TokenType::STATICTK) {
             node->AddChild(ParseDecl());
             continue;
         }
+
+        // BType starters: 'int' or 'void'
         if (cur.type == TokenType::INTTK || cur.type == TokenType::VOIDTK) {
-            // decide FuncDef vs Decl: if followed by ID and '(', it's FuncDef
-            if (PeekToken(1).type == TokenType::IDENFR && PeekToken(2).type == TokenType::LPARENT) {
+            // If 'void' it's always a function definition (no variables of type void in our grammar)
+            if (cur.type == TokenType::VOIDTK) {
                 node->AddChild(ParseFuncDef());
                 continue;
-            } else {
-                node->AddChild(ParseDecl());
-                continue;
             }
+
+            // cur == 'int'
+            // pre1 might be 'main' (main function), an identifier (either declaration or function), or something else
+            if (pre1.type == TokenType::MAINTK && pre2.type == TokenType::LPARENT) {
+                // main function: stop the loop and parse it later
+                break;
+            }
+
+            if (pre1.type == TokenType::IDENFR) {
+                // decide by looking at token after identifier
+                // If '(' -> function definition; if one of '[', '=', ',', ';' -> declaration/var-def
+                if (pre2.type == TokenType::LPARENT) {
+                    node->AddChild(ParseFuncDef());
+                    continue;
+                } else if (pre2.type == TokenType::LBRACK || pre2.type == TokenType::ASSIGN || pre2.type == TokenType::COMMA || pre2.type == TokenType::SEMICN) {
+                    node->AddChild(ParseDecl());
+                    continue;
+                } else {
+                    // Unexpected token after identifier: try declaration as a best-effort recovery
+                    node->AddChild(ParseDecl());
+                    continue;
+                }
+            }
+
+            // If we reach here, token after 'int' is not identifier nor 'main' -> try to recover by consuming and continue
+            ReadToken();
+            continue;
         }
-        // if EOF or unexpected, break
-        if (cur.type == TokenType::EOF_T) break;
-        // fallback: try to consume something to avoid infinite loop
+
+        // If none matched, try to consume something to avoid infinite loop
         ReadToken();
     }
 
@@ -160,11 +193,8 @@ std::unique_ptr<ASTNode> Parser::ParseInitVal() {
         }
         if (Match(TokenType::RBRACE)) node->AddChild(MakeTokenNode(Consume()));
     } else {
-        // for now treat as single token expression
-        Token tk = PeekToken(0);
-        if (tk.type == TokenType::IDENFR || tk.type == TokenType::INTCON) {
-            node->AddChild(MakeTokenNode(Consume()));
-        }
+        // parse as a full expression so we build proper expression subtree
+        node->AddChild(ParseExp());
     }
     return node;
 }
@@ -248,11 +278,19 @@ std::unique_ptr<ASTNode> Parser::ParseBlockItem() {
 // Stmt -> many forms
 std::unique_ptr<ASTNode> Parser::ParseStmt() {
     auto node = make_unique<ASTNode>("Stmt");
+    // use lookahead tokens to disambiguate possible stmt starts without backtracking
     Token tk = PeekToken(0);
+    Token pre1 = PeekToken(1);
+    Token pre2 = PeekToken(2);
+    Token pre3 = PeekToken(3);
+
+    // Block
     if (tk.type == TokenType::LBRACE) {
         node->AddChild(ParseBlock());
         return node;
     }
+
+    // if ( Cond ) Stmt [ else Stmt ]
     if (tk.type == TokenType::IFTK) {
         node->AddChild(MakeTokenNode(Consume())); // if
         if (Match(TokenType::LPARENT)) node->AddChild(MakeTokenNode(Consume()));
@@ -265,41 +303,49 @@ std::unique_ptr<ASTNode> Parser::ParseStmt() {
         }
         return node;
     }
+
+    // for ( [ForStmt] ; [Cond] ; [ForStmt] ) Stmt
     if (tk.type == TokenType::FORTK) {
         node->AddChild(MakeTokenNode(Consume())); // for
         if (Match(TokenType::LPARENT)) node->AddChild(MakeTokenNode(Consume()));
-        // [ForStmt]
         if (PeekToken(0).type != TokenType::SEMICN) node->AddChild(ParseForStmt());
         if (Match(TokenType::SEMICN)) node->AddChild(MakeTokenNode(Consume()));
-        // [Cond]
         if (PeekToken(0).type != TokenType::SEMICN) node->AddChild(ParseCond());
         if (Match(TokenType::SEMICN)) node->AddChild(MakeTokenNode(Consume()));
-        // [ForStmt]
         if (PeekToken(0).type != TokenType::RPARENT) node->AddChild(ParseForStmt());
         if (Match(TokenType::RPARENT)) node->AddChild(MakeTokenNode(Consume()));
         node->AddChild(ParseStmt());
         return node;
     }
+
+    // break ;
     if (tk.type == TokenType::BREAKTK) {
         node->AddChild(MakeTokenNode(Consume()));
         if (Match(TokenType::SEMICN)) node->AddChild(MakeTokenNode(Consume()));
         return node;
     }
+
+    // continue ;
     if (tk.type == TokenType::CONTINUETK) {
         node->AddChild(MakeTokenNode(Consume()));
         if (Match(TokenType::SEMICN)) node->AddChild(MakeTokenNode(Consume()));
         return node;
     }
+
+    // return [Exp] ;
     if (tk.type == TokenType::RETURNTK) {
         node->AddChild(MakeTokenNode(Consume()));
         if (PeekToken(0).type != TokenType::SEMICN) node->AddChild(ParseExp());
         if (Match(TokenType::SEMICN)) node->AddChild(MakeTokenNode(Consume()));
         return node;
     }
+
+    // printf ( FormatString , Exp ) ;  (printf starts with PRINTFTK)
     if (tk.type == TokenType::PRINTFTK) {
         node->AddChild(MakeTokenNode(Consume()));
         if (Match(TokenType::LPARENT)) node->AddChild(MakeTokenNode(Consume()));
         if (Match(TokenType::STRCON)) node->AddChild(MakeTokenNode(Consume()));
+        // the grammar requires exactly one format string then a comma and an Exp, but keep existing support for additional args
         while (Match(TokenType::COMMA)) {
             node->AddChild(MakeTokenNode(Consume()));
             node->AddChild(ParseExp());
@@ -309,29 +355,35 @@ std::unique_ptr<ASTNode> Parser::ParseStmt() {
         return node;
     }
 
-    // LVal '=' Exp ';' | [Exp] ';' or function call as expression
+    // Handle statements starting with identifier (could be assignment, getint assignment, function-call expression, or general expression)
     if (tk.type == TokenType::IDENFR) {
-        // Lookahead to decide assignment vs expression
-        if (PeekToken(1).type == TokenType::ASSIGN || PeekToken(1).type == TokenType::LBRACK) {
-            // parse LVal
+        // If identifier is followed by '[' or '=' => it's definitely a LVal start (so assignment form)
+        if (pre1.type == TokenType::LBRACK || pre1.type == TokenType::ASSIGN) {
+            // LVal '=' Exp ';' or LVal '=' getint() ';'
             node->AddChild(ParseLVal());
             if (Match(TokenType::ASSIGN)) node->AddChild(MakeTokenNode(Consume()));
+            // after '=' could be the getint() special form or any expression
             node->AddChild(ParseExp());
             if (Match(TokenType::SEMICN)) node->AddChild(MakeTokenNode(Consume()));
             return node;
         }
-    }
 
-    // [Exp] ';' (expression stmt)
-    if (PeekToken(0).type == TokenType::SEMICN) {
-        // empty stmt
-        node->AddChild(MakeTokenNode(Consume()));
-        return node;
-    } else {
+        // Otherwise it must be an expression stmt (function call or lval as rvalue etc.)
         node->AddChild(ParseExp());
         if (Match(TokenType::SEMICN)) node->AddChild(MakeTokenNode(Consume()));
         return node;
     }
+
+    // empty statement ';'
+    if (tk.type == TokenType::SEMICN) {
+        node->AddChild(MakeTokenNode(Consume()));
+        return node;
+    }
+
+    // fallback: parse as expression statement
+    node->AddChild(ParseExp());
+    if (Match(TokenType::SEMICN)) node->AddChild(MakeTokenNode(Consume()));
+    return node;
 }
 
 // ForStmt -> LVal '=' Exp { ',' LVal '=' Exp }
@@ -350,8 +402,17 @@ std::unique_ptr<ASTNode> Parser::ParseForStmt() {
 }
 
 // Expressions
-std::unique_ptr<ASTNode> Parser::ParseExp() { return ParseAddExp(); }
-std::unique_ptr<ASTNode> Parser::ParseCond() { return ParseLOrExp(); }
+std::unique_ptr<ASTNode> Parser::ParseExp() {
+    auto node = make_unique<ASTNode>("Exp");
+    node->AddChild(ParseAddExp());
+    return node;
+}
+
+std::unique_ptr<ASTNode> Parser::ParseCond() { 
+    auto node = make_unique<ASTNode>("Cond");
+    node->AddChild(ParseLOrExp());
+    return node;
+}
 
 std::unique_ptr<ASTNode> Parser::ParseLVal() {
     auto node = make_unique<ASTNode>("LVal");
@@ -371,13 +432,9 @@ std::unique_ptr<ASTNode> Parser::ParsePrimaryExp() {
         node->AddChild(ParseExp());
         if (Match(TokenType::RPARENT)) node->AddChild(MakeTokenNode(Consume()));
     } else if (Match(TokenType::IDENFR)) {
-        // could be LVal
-        // peek ahead for '[' indicates LVal
-        if (PeekToken(1).type == TokenType::LBRACK) {
-            node->AddChild(ParseLVal());
-        } else {
-            node->AddChild(MakeTokenNode(Consume()));
-        }
+        // identifier in a PrimaryExp should be treated as an LVal
+        // (function calls are handled earlier in UnaryExp when '(' follows)
+        node->AddChild(ParseLVal());
     } else {
         node->AddChild(ParseNumber());
     }
@@ -433,14 +490,33 @@ std::unique_ptr<ASTNode> Parser::ParseMulExp() {
 }
 
 std::unique_ptr<ASTNode> Parser::ParseAddExp() {
+    // AddExp -> MulExp AddExp'
     auto node = make_unique<ASTNode>("AddExp");
     node->AddChild(ParseMulExp());
+    // Parse the tail (prime) and inline its children into this AddExp node so
+    // the helper nonterminal AddExpPrime does not appear in the final AST
+    // (we keep the original grammar's visible nonterminal as <AddExp>).
+    auto prime = ParseAddExpPrime();
+    if (prime) {
+        for (auto &c : prime->children) {
+            node->AddChild(std::move(c));
+        }
+    }
+    return node;
+}
+
+// AddExp' -> ('+' | '-') MulExp AddExp' | epsilon
+std::unique_ptr<ASTNode> Parser::ParseAddExpPrime() {
+    auto node = make_unique<ASTNode>("AddExpPrime");
+    // loop to handle left-associative chain of + and - operators
     while (Match(TokenType::PLUS) || Match(TokenType::MINU)) {
         node->AddChild(MakeTokenNode(Consume()));
         node->AddChild(ParseMulExp());
     }
     return node;
 }
+
+
 
 std::unique_ptr<ASTNode> Parser::ParseRelExp() {
     auto node = make_unique<ASTNode>("RelExp");
