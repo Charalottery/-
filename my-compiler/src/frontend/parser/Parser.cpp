@@ -475,129 +475,137 @@ std::unique_ptr<ASTNode> Parser::ParseFuncRParams() {
 }
 
 std::unique_ptr<ASTNode> Parser::ParseMulExp() {
-    // MulExp -> UnaryExp MulExp'
-    // We parse UnaryExp first, then inline the prime's children so the AST
-    // does not expose the helper nonterminal but preserves left-to-right order.
+    // MulExp -> UnaryExp | MulExp ('*' | '/' | '%') UnaryExp
+    // Build left-associative nested MulExp nodes so the AST contains
+    // an explicit MulExp node for each reduction of the grammar. This
+    // matches the grammar's left-recursive form (produces nested nodes
+    // rather than a single flattened node).
     auto node = make_unique<ASTNode>("MulExp");
+    // initial operand as UnaryExp wrapped in this MulExp
     node->AddChild(ParseUnaryExp());
-    auto prime = ParseMulExpPrime();
-    if (prime) {
-        for (auto &c : prime->children) node->AddChild(std::move(c));
+
+    // while there are binary mul/div/mod operators, create a new
+    // MulExp node where the left child is the previous MulExp and
+    // the right child is the next UnaryExp (preserving left-assoc).
+    while (Match(TokenType::MULT) || Match(TokenType::DIV) || Match(TokenType::MOD)) {
+        auto opNode = MakeTokenNode(Consume());
+        auto right = ParseUnaryExp();
+
+        auto newNode = make_unique<ASTNode>("MulExp");
+        // move the previous node as the left child
+        newNode->AddChild(std::move(node));
+        // operator token
+        newNode->AddChild(std::move(opNode));
+        // right operand
+        newNode->AddChild(std::move(right));
+
+        node = std::move(newNode);
     }
     return node;
 }
 
-// MulExp' -> ('*' | '/' | '%') UnaryExp MulExp' | epsilon
-std::unique_ptr<ASTNode> Parser::ParseMulExpPrime() {
-    auto node = make_unique<ASTNode>("MulExpPrime");
-    while (Match(TokenType::MULT) || Match(TokenType::DIV) || Match(TokenType::MOD)) {
-        node->AddChild(MakeTokenNode(Consume()));
-        node->AddChild(ParseUnaryExp());
-    }
-    return node;
-}
 
 std::unique_ptr<ASTNode> Parser::ParseAddExp() {
-    // AddExp -> MulExp AddExp'
+    // AddExp -> MulExp | AddExp ('+' | '-') MulExp
+    // Build left-associative nested AddExp nodes to match the grammar's
+    // left-recursive form and produce explicit <AddExp> nodes for each
+    // reduction (so the printer can output them at the correct times).
     auto node = make_unique<ASTNode>("AddExp");
     node->AddChild(ParseMulExp());
-    // Parse the tail (prime) and inline its children into this AddExp node so
-    // the helper nonterminal AddExpPrime does not appear in the final AST
-    // (we keep the original grammar's visible nonterminal as <AddExp>).
-    auto prime = ParseAddExpPrime();
-    if (prime) {
-        for (auto &c : prime->children) {
-            node->AddChild(std::move(c));
-        }
+
+    while (Match(TokenType::PLUS) || Match(TokenType::MINU)) {
+        auto opNode = MakeTokenNode(Consume());
+        auto right = ParseMulExp();
+
+        auto newNode = make_unique<ASTNode>("AddExp");
+        newNode->AddChild(std::move(node));
+        newNode->AddChild(std::move(opNode));
+        newNode->AddChild(std::move(right));
+
+        node = std::move(newNode);
     }
     return node;
 }
 
-// AddExp' -> ('+' | '-') MulExp AddExp' | epsilon
-std::unique_ptr<ASTNode> Parser::ParseAddExpPrime() {
-    auto node = make_unique<ASTNode>("AddExpPrime");
-    // loop to handle left-associative chain of + and - operators
-    while (Match(TokenType::PLUS) || Match(TokenType::MINU)) {
-        node->AddChild(MakeTokenNode(Consume()));
-        node->AddChild(ParseMulExp());
-    }
-    return node;
-}
 
 
 
 std::unique_ptr<ASTNode> Parser::ParseRelExp() {
+    // RelExp -> AddExp | RelExp ('<' | '>' | '<=' | '>=') AddExp
+    // Build left-associative nested RelExp nodes so each reduction
+    // produces an explicit <RelExp> node (matching the grammar).
     auto node = make_unique<ASTNode>("RelExp");
     node->AddChild(ParseAddExp());
     while (Match(TokenType::LSS) || Match(TokenType::GRE) || Match(TokenType::LEQ) || Match(TokenType::GEQ)) {
-        node->AddChild(MakeTokenNode(Consume()));
-        node->AddChild(ParseAddExp());
+        auto opNode = MakeTokenNode(Consume());
+        auto right = ParseAddExp();
+
+        auto newNode = make_unique<ASTNode>("RelExp");
+        newNode->AddChild(std::move(node));
+        newNode->AddChild(std::move(opNode));
+        newNode->AddChild(std::move(right));
+
+        node = std::move(newNode);
     }
     return node;
 }
 
 std::unique_ptr<ASTNode> Parser::ParseEqExp() {
-    // EqExp -> RelExp EqExp'
+    // EqExp -> RelExp | EqExp ('==' | '!=') RelExp
     auto node = make_unique<ASTNode>("EqExp");
     node->AddChild(ParseRelExp());
-    auto prime = ParseEqExpPrime();
-    if (prime) {
-        for (auto &c : prime->children) node->AddChild(std::move(c));
+    while (Match(TokenType::EQL) || Match(TokenType::NEQ)) {
+        auto opNode = MakeTokenNode(Consume());
+        auto right = ParseRelExp();
+
+        auto newNode = make_unique<ASTNode>("EqExp");
+        newNode->AddChild(std::move(node));
+        newNode->AddChild(std::move(opNode));
+        newNode->AddChild(std::move(right));
+
+        node = std::move(newNode);
     }
     return node;
 }
 
-// EqExp' -> ('==' | '!=') RelExp EqExp' | epsilon
-std::unique_ptr<ASTNode> Parser::ParseEqExpPrime() {
-    auto node = make_unique<ASTNode>("EqExpPrime");
-    while (Match(TokenType::EQL) || Match(TokenType::NEQ)) {
-        node->AddChild(MakeTokenNode(Consume()));
-        node->AddChild(ParseRelExp());
-    }
-    return node;
-}
 
 std::unique_ptr<ASTNode> Parser::ParseLAndExp() {
-    // LAndExp -> EqExp LAndExp'
+    // LAndExp -> EqExp | LAndExp '&&' EqExp
     auto node = make_unique<ASTNode>("LAndExp");
     node->AddChild(ParseEqExp());
-    auto prime = ParseLAndExpPrime();
-    if (prime) {
-        for (auto &c : prime->children) node->AddChild(std::move(c));
+    while (Match(TokenType::AND)) {
+        auto opNode = MakeTokenNode(Consume());
+        auto right = ParseEqExp();
+
+        auto newNode = make_unique<ASTNode>("LAndExp");
+        newNode->AddChild(std::move(node));
+        newNode->AddChild(std::move(opNode));
+        newNode->AddChild(std::move(right));
+
+        node = std::move(newNode);
     }
     return node;
 }
 
-// LAndExp' -> '&&' EqExp LAndExp' | epsilon
-std::unique_ptr<ASTNode> Parser::ParseLAndExpPrime() {
-    auto node = make_unique<ASTNode>("LAndExpPrime");
-    while (Match(TokenType::AND)) {
-        node->AddChild(MakeTokenNode(Consume()));
-        node->AddChild(ParseEqExp());
-    }
-    return node;
-}
 
 std::unique_ptr<ASTNode> Parser::ParseLOrExp() {
-    // LOrExp -> LAndExp LOrExp'
+    // LOrExp -> LAndExp | LOrExp '||' LAndExp
     auto node = make_unique<ASTNode>("LOrExp");
     node->AddChild(ParseLAndExp());
-    auto prime = ParseLOrExpPrime();
-    if (prime) {
-        for (auto &c : prime->children) node->AddChild(std::move(c));
+    while (Match(TokenType::OR)) {
+        auto opNode = MakeTokenNode(Consume());
+        auto right = ParseLAndExp();
+
+        auto newNode = make_unique<ASTNode>("LOrExp");
+        newNode->AddChild(std::move(node));
+        newNode->AddChild(std::move(opNode));
+        newNode->AddChild(std::move(right));
+
+        node = std::move(newNode);
     }
     return node;
 }
 
-// LOrExp' -> '||' LAndExp LOrExp' | epsilon
-std::unique_ptr<ASTNode> Parser::ParseLOrExpPrime() {
-    auto node = make_unique<ASTNode>("LOrExpPrime");
-    while (Match(TokenType::OR)) {
-        node->AddChild(MakeTokenNode(Consume()));
-        node->AddChild(ParseLAndExp());
-    }
-    return node;
-}
 
 std::unique_ptr<ASTNode> Parser::ParseConstExp() {
     auto node = make_unique<ASTNode>("ConstExp");

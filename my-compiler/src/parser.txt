@@ -25,22 +25,26 @@ INTCON 10
 <Number>
 <PrimaryExp>
 <UnaryExp>
+<MulExp>
 MULT *
 INTCON 20
 <Number>
 <PrimaryExp>
 <UnaryExp>
 <MulExp>
+<AddExp>
 PLUS +
 INTCON 1
 <Number>
 <PrimaryExp>
 <UnaryExp>
+<MulExp>
 MULT *
 INTCON 3
 <Number>
 <PrimaryExp>
 <UnaryExp>
+<MulExp>
 DIV /
 INTCON 1
 <Number>
@@ -71,6 +75,7 @@ IDENFR n
 <UnaryExp>
 <MulExp>
 <AddExp>
+<RelExp>
 LSS <
 INTCON 0
 <Number>
@@ -122,6 +127,7 @@ IDENFR n
 <MulExp>
 <AddExp>
 <RelExp>
+<EqExp>
 EQL ==
 INTCON 0
 <Number>
@@ -155,6 +161,7 @@ IDENFR n
 <LVal>
 <PrimaryExp>
 <UnaryExp>
+<MulExp>
 MULT *
 IDENFR factorial
 LPARENT (
@@ -163,6 +170,7 @@ IDENFR n
 <PrimaryExp>
 <UnaryExp>
 <MulExp>
+<AddExp>
 MINU -
 INTCON 1
 <Number>
@@ -206,6 +214,7 @@ IDENFR map_cnt
 <PrimaryExp>
 <UnaryExp>
 <MulExp>
+<AddExp>
 PLUS +
 INTCON 1
 <Number>
@@ -223,12 +232,14 @@ INTCON 31
 <PrimaryExp>
 <UnaryExp>
 <MulExp>
+<AddExp>
 PLUS +
 IDENFR num
 <LVal>
 <PrimaryExp>
 <UnaryExp>
 <MulExp>
+<AddExp>
 PLUS +
 IDENFR map_cnt
 <LVal>
@@ -240,11 +251,13 @@ IDENFR map_cnt
 RPARENT )
 <PrimaryExp>
 <UnaryExp>
+<MulExp>
 MULT *
 INTCON 5
 <Number>
 <PrimaryExp>
 <UnaryExp>
+<MulExp>
 MOD %
 INTCON 17
 <Number>
@@ -307,6 +320,7 @@ IDENFR k
 <UnaryExp>
 <MulExp>
 <AddExp>
+<RelExp>
 LSS <
 INTCON 7
 <Number>
@@ -328,6 +342,7 @@ IDENFR k
 <PrimaryExp>
 <UnaryExp>
 <MulExp>
+<AddExp>
 PLUS +
 INTCON 1
 <Number>
