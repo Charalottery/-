@@ -4,6 +4,7 @@
 #include "error/ErrorRecorder.hpp"
 #include "error/ErrorType.hpp"
 #include "frontend/parser/Parser.hpp"
+#include "midend/symbol/SemanticAnalyzer.hpp"
 #include <fstream>
 #include <iostream>
 #include <algorithm>
@@ -58,7 +59,9 @@ int main() {
         return 0;
     }
 
-    // write parser output as post-order traversal of AST (no errors present)
+    // semantic analysis (build symbol table) and then write parser output as post-order traversal of AST (no errors present)
+    SemanticAnalyzer analyzer;
+    analyzer.Analyze(tree.get());
     std::remove("error.txt");
     std::remove("parser.txt");
     std::ofstream pf("parser.txt");
