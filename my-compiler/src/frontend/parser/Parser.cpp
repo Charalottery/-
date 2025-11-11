@@ -22,68 +22,62 @@ Token Parser::Consume() {
 
 std::unique_ptr<ASTNode> Parser::ParseCompUnit() {
     auto node = make_unique<ASTNode>("CompUnit");
-    // {Decl} {FuncDef} MainFuncDef
-    // Use 2-token pre-read (peek1, peek2) to disambiguate productions that start with the same token
+    // Enforce grammar: {Decl} {FuncDef} MainFuncDef
+    // First parse zero-or-more declarations
     while (true) {
         Token cur = PeekToken(0);
         Token pre1 = PeekToken(1);
         Token pre2 = PeekToken(2);
 
-        // EOF -> stop
         if (cur.type == TokenType::EOF_T) break;
 
-        // detect main function start: 'int' 'main' '('
-        if (cur.type == TokenType::INTTK && pre1.type == TokenType::MAINTK && pre2.type == TokenType::LPARENT) {
-            break;
-        }
-
-        // const/static always start a declaration
+        // declarations start with 'const' or 'static'
         if (cur.type == TokenType::CONSTTK || cur.type == TokenType::STATICTK) {
             node->AddChild(ParseDecl());
             continue;
         }
 
-        // BType starters: 'int' or 'void'
-        if (cur.type == TokenType::INTTK || cur.type == TokenType::VOIDTK) {
-            // If 'void' it's always a function definition (no variables of type void in our grammar)
-            if (cur.type == TokenType::VOIDTK) {
-                node->AddChild(ParseFuncDef());
-                continue;
-            }
-
-            // cur == 'int'
-            // pre1 might be 'main' (main function), an identifier (either declaration or function), or something else
-            if (pre1.type == TokenType::MAINTK && pre2.type == TokenType::LPARENT) {
-                // main function: stop the loop and parse it later
-                break;
-            }
-
-            if (pre1.type == TokenType::IDENFR) {
-                // decide by looking at token after identifier
-                // If '(' -> function definition; if one of '[', '=', ',', ';' -> declaration/var-def
-                if (pre2.type == TokenType::LPARENT) {
-                    node->AddChild(ParseFuncDef());
-                    continue;
-                } else if (pre2.type == TokenType::LBRACK || pre2.type == TokenType::ASSIGN || pre2.type == TokenType::COMMA || pre2.type == TokenType::SEMICN) {
-                    node->AddChild(ParseDecl());
-                    continue;
-                } else {
-                    // Unexpected token after identifier: try declaration as a best-effort recovery
-                    node->AddChild(ParseDecl());
-                    continue;
-                }
-            }
-
-            // If we reach here, token after 'int' is not identifier nor 'main' -> try to recover by consuming and continue
-            ReadToken();
+        // an 'int' followed by an identifier and then one of [ '[', '=', ',', ';' ] is a VarDecl
+        if (cur.type == TokenType::INTTK && pre1.type == TokenType::IDENFR &&
+            (pre2.type == TokenType::LBRACK || pre2.type == TokenType::ASSIGN || pre2.type == TokenType::COMMA || pre2.type == TokenType::SEMICN)) {
+            node->AddChild(ParseDecl());
             continue;
         }
 
-        // If none matched, try to consume something to avoid infinite loop
-        ReadToken();
+        // otherwise stop scanning declarations
+        break;
     }
 
-    // MainFuncDef
+    // Then parse zero-or-more function definitions
+    while (true) {
+        Token cur = PeekToken(0);
+        Token pre1 = PeekToken(1);
+        Token pre2 = PeekToken(2);
+
+        if (cur.type == TokenType::EOF_T) break;
+
+        // main function start: stop here and parse MainFuncDef later
+        if (cur.type == TokenType::INTTK && pre1.type == TokenType::MAINTK && pre2.type == TokenType::LPARENT) {
+            break;
+        }
+
+        // 'void' always begins a function definition
+        if (cur.type == TokenType::VOIDTK) {
+            node->AddChild(ParseFuncDef());
+            continue;
+        }
+
+        // 'int' identifier '(' indicates a function definition
+        if (cur.type == TokenType::INTTK && pre1.type == TokenType::IDENFR && pre2.type == TokenType::LPARENT) {
+            node->AddChild(ParseFuncDef());
+            continue;
+        }
+
+        // otherwise stop scanning function defs
+        break;
+    }
+
+    // Finally parse main function (per grammar this must appear)
     node->AddChild(ParseMainFuncDef());
 
     return node;
@@ -184,11 +178,12 @@ std::unique_ptr<ASTNode> Parser::ParseInitVal() {
     auto node = make_unique<ASTNode>("InitVal");
     if (Match(TokenType::LBRACE)) {
         node->AddChild(MakeTokenNode(Consume()));
+        // Grammar: '{' [ Exp { ',' Exp } ] '}'
         if (PeekToken(0).type != TokenType::RBRACE) {
-            node->AddChild(ParseInitVal());
+            node->AddChild(ParseExp());
             while (Match(TokenType::COMMA)) {
                 node->AddChild(MakeTokenNode(Consume()));
-                node->AddChild(ParseInitVal());
+                node->AddChild(ParseExp());
             }
         }
         if (Match(TokenType::RBRACE)) node->AddChild(MakeTokenNode(Consume()));
@@ -480,8 +475,21 @@ std::unique_ptr<ASTNode> Parser::ParseFuncRParams() {
 }
 
 std::unique_ptr<ASTNode> Parser::ParseMulExp() {
+    // MulExp -> UnaryExp MulExp'
+    // We parse UnaryExp first, then inline the prime's children so the AST
+    // does not expose the helper nonterminal but preserves left-to-right order.
     auto node = make_unique<ASTNode>("MulExp");
     node->AddChild(ParseUnaryExp());
+    auto prime = ParseMulExpPrime();
+    if (prime) {
+        for (auto &c : prime->children) node->AddChild(std::move(c));
+    }
+    return node;
+}
+
+// MulExp' -> ('*' | '/' | '%') UnaryExp MulExp' | epsilon
+std::unique_ptr<ASTNode> Parser::ParseMulExpPrime() {
+    auto node = make_unique<ASTNode>("MulExpPrime");
     while (Match(TokenType::MULT) || Match(TokenType::DIV) || Match(TokenType::MOD)) {
         node->AddChild(MakeTokenNode(Consume()));
         node->AddChild(ParseUnaryExp());
@@ -529,8 +537,19 @@ std::unique_ptr<ASTNode> Parser::ParseRelExp() {
 }
 
 std::unique_ptr<ASTNode> Parser::ParseEqExp() {
+    // EqExp -> RelExp EqExp'
     auto node = make_unique<ASTNode>("EqExp");
     node->AddChild(ParseRelExp());
+    auto prime = ParseEqExpPrime();
+    if (prime) {
+        for (auto &c : prime->children) node->AddChild(std::move(c));
+    }
+    return node;
+}
+
+// EqExp' -> ('==' | '!=') RelExp EqExp' | epsilon
+std::unique_ptr<ASTNode> Parser::ParseEqExpPrime() {
+    auto node = make_unique<ASTNode>("EqExpPrime");
     while (Match(TokenType::EQL) || Match(TokenType::NEQ)) {
         node->AddChild(MakeTokenNode(Consume()));
         node->AddChild(ParseRelExp());
@@ -539,8 +558,19 @@ std::unique_ptr<ASTNode> Parser::ParseEqExp() {
 }
 
 std::unique_ptr<ASTNode> Parser::ParseLAndExp() {
+    // LAndExp -> EqExp LAndExp'
     auto node = make_unique<ASTNode>("LAndExp");
     node->AddChild(ParseEqExp());
+    auto prime = ParseLAndExpPrime();
+    if (prime) {
+        for (auto &c : prime->children) node->AddChild(std::move(c));
+    }
+    return node;
+}
+
+// LAndExp' -> '&&' EqExp LAndExp' | epsilon
+std::unique_ptr<ASTNode> Parser::ParseLAndExpPrime() {
+    auto node = make_unique<ASTNode>("LAndExpPrime");
     while (Match(TokenType::AND)) {
         node->AddChild(MakeTokenNode(Consume()));
         node->AddChild(ParseEqExp());
@@ -549,8 +579,19 @@ std::unique_ptr<ASTNode> Parser::ParseLAndExp() {
 }
 
 std::unique_ptr<ASTNode> Parser::ParseLOrExp() {
+    // LOrExp -> LAndExp LOrExp'
     auto node = make_unique<ASTNode>("LOrExp");
     node->AddChild(ParseLAndExp());
+    auto prime = ParseLOrExpPrime();
+    if (prime) {
+        for (auto &c : prime->children) node->AddChild(std::move(c));
+    }
+    return node;
+}
+
+// LOrExp' -> '||' LAndExp LOrExp' | epsilon
+std::unique_ptr<ASTNode> Parser::ParseLOrExpPrime() {
+    auto node = make_unique<ASTNode>("LOrExpPrime");
     while (Match(TokenType::OR)) {
         node->AddChild(MakeTokenNode(Consume()));
         node->AddChild(ParseLAndExp());
