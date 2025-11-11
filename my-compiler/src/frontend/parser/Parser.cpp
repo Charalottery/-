@@ -328,7 +328,12 @@ std::unique_ptr<ASTNode> Parser::ParseStmt() {
         node->AddChild(MakeTokenNode(Consume())); // if
         if (Match(TokenType::LPARENT)) node->AddChild(MakeTokenNode(Consume()));
         node->AddChild(ParseCond());
-        if (Match(TokenType::RPARENT)) node->AddChild(MakeTokenNode(Consume()));
+        if (Match(TokenType::RPARENT)) {
+            node->AddChild(MakeTokenNode(Consume()));
+        } else {
+            int errLine = lastConsumed.line >= 0 ? lastConsumed.line : PeekToken(0).line;
+            ErrorRecorder::AddError(Error(ErrorType::MISS_RPARENT, errLine));
+        }
         node->AddChild(ParseStmt());
         if (Match(TokenType::ELSETK)) {
             node->AddChild(MakeTokenNode(Consume()));
@@ -342,11 +347,26 @@ std::unique_ptr<ASTNode> Parser::ParseStmt() {
         node->AddChild(MakeTokenNode(Consume())); // for
         if (Match(TokenType::LPARENT)) node->AddChild(MakeTokenNode(Consume()));
         if (PeekToken(0).type != TokenType::SEMICN) node->AddChild(ParseForStmt());
-        if (Match(TokenType::SEMICN)) node->AddChild(MakeTokenNode(Consume()));
+        if (Match(TokenType::SEMICN)) {
+            node->AddChild(MakeTokenNode(Consume()));
+        } else {
+            int errLine = lastConsumed.line >= 0 ? lastConsumed.line : PeekToken(0).line;
+            ErrorRecorder::AddError(Error(ErrorType::MISS_SEMICN, errLine));
+        }
         if (PeekToken(0).type != TokenType::SEMICN) node->AddChild(ParseCond());
-        if (Match(TokenType::SEMICN)) node->AddChild(MakeTokenNode(Consume()));
+        if (Match(TokenType::SEMICN)) {
+            node->AddChild(MakeTokenNode(Consume()));
+        } else {
+            int errLine = lastConsumed.line >= 0 ? lastConsumed.line : PeekToken(0).line;
+            ErrorRecorder::AddError(Error(ErrorType::MISS_SEMICN, errLine));
+        }
         if (PeekToken(0).type != TokenType::RPARENT) node->AddChild(ParseForStmt());
-        if (Match(TokenType::RPARENT)) node->AddChild(MakeTokenNode(Consume()));
+        if (Match(TokenType::RPARENT)) {
+            node->AddChild(MakeTokenNode(Consume()));
+        } else {
+            int errLine = lastConsumed.line >= 0 ? lastConsumed.line : PeekToken(0).line;
+            ErrorRecorder::AddError(Error(ErrorType::MISS_RPARENT, errLine));
+        }
         node->AddChild(ParseStmt());
         return node;
     }
