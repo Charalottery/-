@@ -200,18 +200,21 @@ void Lexer::scanOperatorOrComment() {
     }
 
     // single '&' or '|' are illegal symbols per spec -> record error
+    // BUT treat them as logical operators for parsing (as '&&' / '||')
+    // while keeping the recorded token text as '&' or '|' (per spec)
     if (c == '&' && n != '&') {
-        ErrorRecorder::AddError(Error(ErrorType::ILLEGAL_SYMBOL, lineNum, "Illegal single '&'"));
-        // consume the character and set token as ERROR
-        token = "&";
-        tokenType = TokenType::ERROR_T;
+        // record illegal-symbol error at this line with the single-character name
+        ErrorRecorder::AddError(Error(ErrorType::ILLEGAL_SYMBOL, lineNum, "&"));
+        // produce a logical-AND token so parser can continue as if '&&' was present
+        token = "&";                // keep the token text as single '&' for recording/printing
+        tokenType = TokenType::AND;  // parser expects TokenType::AND for logical and
         advance();
         return;
     }
     if (c == '|' && n != '|') {
-        ErrorRecorder::AddError(Error(ErrorType::ILLEGAL_SYMBOL, lineNum, "Illegal single '|'"));
+        ErrorRecorder::AddError(Error(ErrorType::ILLEGAL_SYMBOL, lineNum, "|"));
         token = "|";
-        tokenType = TokenType::ERROR_T;
+        tokenType = TokenType::OR;   // treat as logical-or for parser
         advance();
         return;
     }

@@ -13,6 +13,7 @@ public:
 
 private:
     TokenStream &ts;
+    Token lastConsumed; // track last consumed token for error reporting
 
     // helpers
     bool Match(TokenType t) const;
@@ -56,15 +57,10 @@ private:
     std::unique_ptr<ASTNode> ParseFuncRParams();
 
     std::unique_ptr<ASTNode> ParseMulExp();
-    std::unique_ptr<ASTNode> ParseMulExpPrime();
     std::unique_ptr<ASTNode> ParseAddExp();
-    std::unique_ptr<ASTNode> ParseAddExpPrime();
     std::unique_ptr<ASTNode> ParseRelExp();
-    std::unique_ptr<ASTNode> ParseEqExpPrime();
     std::unique_ptr<ASTNode> ParseEqExp();
-    std::unique_ptr<ASTNode> ParseLAndExpPrime();
     std::unique_ptr<ASTNode> ParseLAndExp();
-    std::unique_ptr<ASTNode> ParseLOrExpPrime();
     std::unique_ptr<ASTNode> ParseLOrExp();
     std::unique_ptr<ASTNode> ParseConstExp();
 };

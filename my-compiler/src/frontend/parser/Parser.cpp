@@ -1,5 +1,7 @@
 #include "Parser.hpp"
 #include "../lexer/TokenPrinter.hpp"
+#include "../../error/ErrorRecorder.hpp"
+#include "../../error/ErrorType.hpp"
 #include <iostream>
 
 using std::make_unique;
@@ -17,6 +19,7 @@ bool Parser::MatchValue(const std::string &v) const {
 Token Parser::Consume() {
     Token tk = PeekToken(0);
     ReadToken();
+    lastConsumed = tk;
     return tk;
 }
 
@@ -103,7 +106,12 @@ std::unique_ptr<ASTNode> Parser::ParseConstDecl() {
         node->AddChild(MakeTokenNode(Consume()));
         node->AddChild(ParseConstDef());
     }
-    if (Match(TokenType::SEMICN)) node->AddChild(MakeTokenNode(Consume()));
+    if (Match(TokenType::SEMICN)) {
+        node->AddChild(MakeTokenNode(Consume()));
+    } else {
+        int errLine = lastConsumed.line >= 0 ? lastConsumed.line : PeekToken(0).line;
+        ErrorRecorder::AddError(Error(ErrorType::MISS_SEMICN, errLine));
+    }
     return node;
 }
 
@@ -119,7 +127,12 @@ std::unique_ptr<ASTNode> Parser::ParseConstDef() {
     if (Match(TokenType::LBRACK)) {
         node->AddChild(MakeTokenNode(Consume()));
         node->AddChild(ParseConstExp());
-        if (Match(TokenType::RBRACK)) node->AddChild(MakeTokenNode(Consume()));
+        if (Match(TokenType::RBRACK)) {
+            node->AddChild(MakeTokenNode(Consume()));
+        } else {
+            int errLine = lastConsumed.line >= 0 ? lastConsumed.line : PeekToken(0).line;
+            ErrorRecorder::AddError(Error(ErrorType::MISS_RBRACK, errLine));
+        }
     }
     if (Match(TokenType::ASSIGN)) node->AddChild(MakeTokenNode(Consume()));
     node->AddChild(ParseConstInitVal());
@@ -155,7 +168,12 @@ std::unique_ptr<ASTNode> Parser::ParseVarDecl() {
         node->AddChild(MakeTokenNode(Consume()));
         node->AddChild(ParseVarDef());
     }
-    if (Match(TokenType::SEMICN)) node->AddChild(MakeTokenNode(Consume()));
+    if (Match(TokenType::SEMICN)) {
+        node->AddChild(MakeTokenNode(Consume()));
+    } else {
+        int errLine = lastConsumed.line >= 0 ? lastConsumed.line : PeekToken(0).line;
+        ErrorRecorder::AddError(Error(ErrorType::MISS_SEMICN, errLine));
+    }
     return node;
 }
 
@@ -165,7 +183,12 @@ std::unique_ptr<ASTNode> Parser::ParseVarDef() {
     if (Match(TokenType::LBRACK)) {
         node->AddChild(MakeTokenNode(Consume()));
         node->AddChild(ParseConstExp());
-        if (Match(TokenType::RBRACK)) node->AddChild(MakeTokenNode(Consume()));
+        if (Match(TokenType::RBRACK)) {
+            node->AddChild(MakeTokenNode(Consume()));
+        } else {
+            int errLine = lastConsumed.line >= 0 ? lastConsumed.line : PeekToken(0).line;
+            ErrorRecorder::AddError(Error(ErrorType::MISS_RBRACK, errLine));
+        }
     }
     if (Match(TokenType::ASSIGN)) {
         node->AddChild(MakeTokenNode(Consume()));
@@ -202,7 +225,12 @@ std::unique_ptr<ASTNode> Parser::ParseFuncDef() {
     if (PeekToken(0).type != TokenType::RPARENT) {
         node->AddChild(ParseFuncFParams());
     }
-    if (Match(TokenType::RPARENT)) node->AddChild(MakeTokenNode(Consume()));
+    if (Match(TokenType::RPARENT)) {
+        node->AddChild(MakeTokenNode(Consume()));
+    } else {
+        int errLine = lastConsumed.line >= 0 ? lastConsumed.line : PeekToken(0).line;
+        ErrorRecorder::AddError(Error(ErrorType::MISS_RPARENT, errLine));
+    }
     node->AddChild(ParseBlock());
     return node;
 }
@@ -212,7 +240,12 @@ std::unique_ptr<ASTNode> Parser::ParseMainFuncDef() {
     if (Match(TokenType::INTTK)) node->AddChild(MakeTokenNode(Consume()));
     if (Match(TokenType::MAINTK)) node->AddChild(MakeTokenNode(Consume()));
     if (Match(TokenType::LPARENT)) node->AddChild(MakeTokenNode(Consume()));
-    if (Match(TokenType::RPARENT)) node->AddChild(MakeTokenNode(Consume()));
+    if (Match(TokenType::RPARENT)) {
+        node->AddChild(MakeTokenNode(Consume()));
+    } else {
+        int errLine = lastConsumed.line >= 0 ? lastConsumed.line : PeekToken(0).line;
+        ErrorRecorder::AddError(Error(ErrorType::MISS_RPARENT, errLine));
+    }
     node->AddChild(ParseBlock());
     return node;
 }
@@ -242,7 +275,12 @@ std::unique_ptr<ASTNode> Parser::ParseFuncFParam() {
     if (Match(TokenType::IDENFR)) node->AddChild(MakeTokenNode(Consume()));
     if (Match(TokenType::LBRACK)) {
         node->AddChild(MakeTokenNode(Consume()));
-        if (Match(TokenType::RBRACK)) node->AddChild(MakeTokenNode(Consume()));
+        if (Match(TokenType::RBRACK)) {
+            node->AddChild(MakeTokenNode(Consume()));
+        } else {
+            int errLine = lastConsumed.line >= 0 ? lastConsumed.line : PeekToken(0).line;
+            ErrorRecorder::AddError(Error(ErrorType::MISS_RBRACK, errLine));
+        }
     }
     return node;
 }
@@ -316,14 +354,24 @@ std::unique_ptr<ASTNode> Parser::ParseStmt() {
     // break ;
     if (tk.type == TokenType::BREAKTK) {
         node->AddChild(MakeTokenNode(Consume()));
-        if (Match(TokenType::SEMICN)) node->AddChild(MakeTokenNode(Consume()));
+        if (Match(TokenType::SEMICN)) {
+            node->AddChild(MakeTokenNode(Consume()));
+        } else {
+            int errLine = lastConsumed.line >= 0 ? lastConsumed.line : PeekToken(0).line;
+            ErrorRecorder::AddError(Error(ErrorType::MISS_SEMICN, errLine));
+        }
         return node;
     }
 
     // continue ;
     if (tk.type == TokenType::CONTINUETK) {
         node->AddChild(MakeTokenNode(Consume()));
-        if (Match(TokenType::SEMICN)) node->AddChild(MakeTokenNode(Consume()));
+        if (Match(TokenType::SEMICN)) {
+            node->AddChild(MakeTokenNode(Consume()));
+        } else {
+            int errLine = lastConsumed.line >= 0 ? lastConsumed.line : PeekToken(0).line;
+            ErrorRecorder::AddError(Error(ErrorType::MISS_SEMICN, errLine));
+        }
         return node;
     }
 
@@ -331,7 +379,12 @@ std::unique_ptr<ASTNode> Parser::ParseStmt() {
     if (tk.type == TokenType::RETURNTK) {
         node->AddChild(MakeTokenNode(Consume()));
         if (PeekToken(0).type != TokenType::SEMICN) node->AddChild(ParseExp());
-        if (Match(TokenType::SEMICN)) node->AddChild(MakeTokenNode(Consume()));
+        if (Match(TokenType::SEMICN)) {
+            node->AddChild(MakeTokenNode(Consume()));
+        } else {
+            int errLine = lastConsumed.line >= 0 ? lastConsumed.line : PeekToken(0).line;
+            ErrorRecorder::AddError(Error(ErrorType::MISS_SEMICN, errLine));
+        }
         return node;
     }
 
@@ -345,8 +398,18 @@ std::unique_ptr<ASTNode> Parser::ParseStmt() {
             node->AddChild(MakeTokenNode(Consume()));
             node->AddChild(ParseExp());
         }
-        if (Match(TokenType::RPARENT)) node->AddChild(MakeTokenNode(Consume()));
-        if (Match(TokenType::SEMICN)) node->AddChild(MakeTokenNode(Consume()));
+        if (Match(TokenType::RPARENT)) {
+            node->AddChild(MakeTokenNode(Consume()));
+        } else {
+            int errLine = lastConsumed.line >= 0 ? lastConsumed.line : PeekToken(0).line;
+            ErrorRecorder::AddError(Error(ErrorType::MISS_RPARENT, errLine));
+        }
+        if (Match(TokenType::SEMICN)) {
+            node->AddChild(MakeTokenNode(Consume()));
+        } else {
+            int errLine = lastConsumed.line >= 0 ? lastConsumed.line : PeekToken(0).line;
+            ErrorRecorder::AddError(Error(ErrorType::MISS_SEMICN, errLine));
+        }
         return node;
     }
 
@@ -359,13 +422,23 @@ std::unique_ptr<ASTNode> Parser::ParseStmt() {
             if (Match(TokenType::ASSIGN)) node->AddChild(MakeTokenNode(Consume()));
             // after '=' could be the getint() special form or any expression
             node->AddChild(ParseExp());
-            if (Match(TokenType::SEMICN)) node->AddChild(MakeTokenNode(Consume()));
+            if (Match(TokenType::SEMICN)) {
+                node->AddChild(MakeTokenNode(Consume()));
+            } else {
+                int errLine = lastConsumed.line >= 0 ? lastConsumed.line : PeekToken(0).line;
+                ErrorRecorder::AddError(Error(ErrorType::MISS_SEMICN, errLine));
+            }
             return node;
         }
 
         // Otherwise it must be an expression stmt (function call or lval as rvalue etc.)
         node->AddChild(ParseExp());
-        if (Match(TokenType::SEMICN)) node->AddChild(MakeTokenNode(Consume()));
+        if (Match(TokenType::SEMICN)) {
+            node->AddChild(MakeTokenNode(Consume()));
+        } else {
+            int errLine = lastConsumed.line >= 0 ? lastConsumed.line : PeekToken(0).line;
+            ErrorRecorder::AddError(Error(ErrorType::MISS_SEMICN, errLine));
+        }
         return node;
     }
 
@@ -415,7 +488,12 @@ std::unique_ptr<ASTNode> Parser::ParseLVal() {
     if (Match(TokenType::LBRACK)) {
         node->AddChild(MakeTokenNode(Consume()));
         node->AddChild(ParseExp());
-        if (Match(TokenType::RBRACK)) node->AddChild(MakeTokenNode(Consume()));
+        if (Match(TokenType::RBRACK)) {
+            node->AddChild(MakeTokenNode(Consume()));
+        } else {
+            int errLine = lastConsumed.line >= 0 ? lastConsumed.line : PeekToken(0).line;
+            ErrorRecorder::AddError(Error(ErrorType::MISS_RBRACK, errLine));
+        }
     }
     return node;
 }
@@ -425,7 +503,12 @@ std::unique_ptr<ASTNode> Parser::ParsePrimaryExp() {
     if (Match(TokenType::LPARENT)) {
         node->AddChild(MakeTokenNode(Consume()));
         node->AddChild(ParseExp());
-        if (Match(TokenType::RPARENT)) node->AddChild(MakeTokenNode(Consume()));
+        if (Match(TokenType::RPARENT)) {
+            node->AddChild(MakeTokenNode(Consume()));
+        } else {
+            int errLine = lastConsumed.line >= 0 ? lastConsumed.line : PeekToken(0).line;
+            ErrorRecorder::AddError(Error(ErrorType::MISS_RPARENT, errLine));
+        }
     } else if (Match(TokenType::IDENFR)) {
         // identifier in a PrimaryExp should be treated as an LVal
         // (function calls are handled earlier in UnaryExp when '(' follows)
@@ -448,7 +531,12 @@ std::unique_ptr<ASTNode> Parser::ParseUnaryExp() {
         node->AddChild(MakeTokenNode(Consume())); // func name
         if (Match(TokenType::LPARENT)) node->AddChild(MakeTokenNode(Consume()));
         if (PeekToken(0).type != TokenType::RPARENT) node->AddChild(ParseFuncRParams());
-        if (Match(TokenType::RPARENT)) node->AddChild(MakeTokenNode(Consume()));
+        if (Match(TokenType::RPARENT)) {
+            node->AddChild(MakeTokenNode(Consume()));
+        } else {
+            int errLine = lastConsumed.line >= 0 ? lastConsumed.line : PeekToken(0).line;
+            ErrorRecorder::AddError(Error(ErrorType::MISS_RPARENT, errLine));
+        }
     } else if (Match(TokenType::PLUS) || Match(TokenType::MINU) || Match(TokenType::NOT)) {
         node->AddChild(ParseUnaryOp());
         node->AddChild(ParseUnaryExp());

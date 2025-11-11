@@ -30,32 +30,36 @@ int main() {
     // Let the lexer produce the full token list itself.
     lexer.GenerateTokenList();
 
-    // if errors exist, write error.txt sorted by line number
-    if (ErrorRecorder::HasErrors()) {
-        // remove stale lexer output if exists
-        std::remove("lexer.txt");
-
-        auto errors = ErrorRecorder::GetErrors();
-        std::sort(errors.begin(), errors.end(), [](const Error &a, const Error &b){ return a.line < b.line; });
-        std::ofstream ef("error.txt");
-        for (const auto &e : errors) {
-        // write: 行号 错误类别码
-        // Per spec: illegal symbol -> category code 'a'
-        std::string code = (e.type == ErrorType::ILLEGAL_SYMBOL) ? std::string("a") : std::string("?");
-        ef << e.line << " " << code << "\n";
-        }
-        return 0;
-    }
-
-    // otherwise write lexer.txt with tokens in reading order (exclude EOF)
-    // remove stale error file if exists
-    std::remove("error.txt");
     // build token stream and parse
     TokenStream ts(lexer.GetTokenList());
     Parser parser(ts);
     auto tree = parser.ParseCompUnit();
+    // After the whole compilation flow (lexing + parsing), if any errors were recorded
+    // write them to error.txt sorted by line number. Otherwise write parser output.
+    if (ErrorRecorder::HasErrors()) {
+        auto errors = ErrorRecorder::GetErrors();
+        std::sort(errors.begin(), errors.end(), [](const Error &a, const Error &b){ return a.line < b.line; });
+        std::ofstream ef("error.txt");
+        for (const auto &e : errors) {
+            // write: 行号 错误类别码
+            // Map ErrorType -> spec code: illegal symbol -> 'a', missing semicolon -> 'i', missing ')' -> 'j', missing ']' -> 'k'
+            std::string code;
+            switch (e.type) {
+                case ErrorType::ILLEGAL_SYMBOL: code = "a"; break;
+                case ErrorType::MISS_SEMICN: code = "i"; break;
+                case ErrorType::MISS_RPARENT: code = "j"; break;
+                case ErrorType::MISS_RBRACK: code = "k"; break;
+                default: code = "?"; break;
+            }
+            ef << e.line << " " << code << "\n";
+        }
+        // ensure no stale parser output remains
+        std::remove("parser.txt");
+        return 0;
+    }
 
-    // write parser output as post-order traversal of AST
+    // write parser output as post-order traversal of AST (no errors present)
+    std::remove("error.txt");
     std::remove("parser.txt");
     std::ofstream pf("parser.txt");
     if (tree) tree->PostOrderPrint(pf);
