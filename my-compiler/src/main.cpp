@@ -43,13 +43,21 @@ int main() {
         std::ofstream ef("error.txt");
         for (const auto &e : errors) {
             // write: ÐÐºÅ ´íÎóÀà±ðÂë
-            // Map ErrorType -> spec code: illegal symbol -> 'a', missing semicolon -> 'i', missing ')' -> 'j', missing ']' -> 'k'
             std::string code;
             switch (e.type) {
                 case ErrorType::ILLEGAL_SYMBOL: code = "a"; break;
+                case ErrorType::REDEFINE: code = "b"; break;
+                case ErrorType::UNDEFINED: code = "c"; break;
+                case ErrorType::FUNC_PARAM_COUNT: code = "d"; break;
+                case ErrorType::FUNC_PARAM_TYPE: code = "e"; break;
+                case ErrorType::RETURN_VALUE_IN_VOID: code = "f"; break;
+                case ErrorType::MISSING_RETURN: code = "g"; break;
+                case ErrorType::ASSIGN_TO_CONST: code = "h"; break;
                 case ErrorType::MISS_SEMICN: code = "i"; break;
                 case ErrorType::MISS_RPARENT: code = "j"; break;
                 case ErrorType::MISS_RBRACK: code = "k"; break;
+                case ErrorType::PRINTF_MISMATCH: code = "l"; break;
+                case ErrorType::BAD_BREAK_CONTINUE: code = "m"; break;
                 default: code = "?"; break;
             }
             ef << e.line << " " << code << "\n";
@@ -62,6 +70,38 @@ int main() {
     // semantic analysis (build symbol table) and then write parser output as post-order traversal of AST (no errors present)
     SemanticAnalyzer analyzer;
     analyzer.Analyze(tree.get());
+    // After semantic analysis, check if any semantic errors were recorded.
+    if (ErrorRecorder::HasErrors()) {
+        auto errors = ErrorRecorder::GetErrors();
+        std::sort(errors.begin(), errors.end(), [](const Error &a, const Error &b){ return a.line < b.line; });
+        std::ofstream ef("error.txt");
+        for (const auto &e : errors) {
+            std::string code;
+            switch (e.type) {
+                case ErrorType::ILLEGAL_SYMBOL: code = "a"; break;
+                case ErrorType::REDEFINE: code = "b"; break;
+                case ErrorType::UNDEFINED: code = "c"; break;
+                case ErrorType::FUNC_PARAM_COUNT: code = "d"; break;
+                case ErrorType::FUNC_PARAM_TYPE: code = "e"; break;
+                case ErrorType::RETURN_VALUE_IN_VOID: code = "f"; break;
+                case ErrorType::MISSING_RETURN: code = "g"; break;
+                case ErrorType::ASSIGN_TO_CONST: code = "h"; break;
+                case ErrorType::MISS_SEMICN: code = "i"; break;
+                case ErrorType::MISS_RPARENT: code = "j"; break;
+                case ErrorType::MISS_RBRACK: code = "k"; break;
+                case ErrorType::PRINTF_MISMATCH: code = "l"; break;
+                case ErrorType::BAD_BREAK_CONTINUE: code = "m"; break;
+                default: code = "?"; break;
+            }
+            ef << e.line << " " << code << "\n";
+        }
+        // do not produce parser.txt or symbol.txt when there are errors
+        std::remove("parser.txt");
+        std::remove("symbol.txt");
+        return 0;
+    }
+
+    // no errors ¡ª write parser.txt
     std::remove("error.txt");
     std::remove("parser.txt");
     std::ofstream pf("parser.txt");

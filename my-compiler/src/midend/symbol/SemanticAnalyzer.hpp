@@ -30,13 +30,28 @@ private:
 
     void Walk(const ASTNode *node);
 
+    // statement and expression handlers for semantic checks
+    void HandleStmt(const ASTNode *node);
+    void HandleExp(const ASTNode *node);
+    void HandleUnaryExp(const ASTNode *node);
+    void HandleLValUse(const ASTNode *node);
+
+    // state tracking
+    int currentFunctionRet = -1; // -1 = none, 0 = void, 1 = int
+    bool currentFunctionHasReturn = false;
+    int loopDepth = 0;
+
     // node-specific handlers
     void HandleCompUnit(const ASTNode *node);
     void HandleDecl(const ASTNode *node);
     void HandleConstDecl(const ASTNode *node);
     void HandleVarDecl(const ASTNode *node);
     void HandleFuncDef(const ASTNode *node, bool isMain=false);
-    void HandleBlock(const ASTNode *node);
+    void HandleBlock(const ASTNode *node, const std::vector<Symbol>* preInsert = nullptr);
+    // helper: search a subtree for nested Block nodes and handle them
+    void WalkForBlocks(const ASTNode *node);
+    // build parameter symbols from FuncFParams node (does not set tableId)
+    std::vector<Symbol> BuildParamSymbols(const ASTNode *paramsNode);
     void HandleFuncFParams(const ASTNode *node);
     void HandleFuncFParam(const ASTNode *node);
 };
