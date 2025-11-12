@@ -3,6 +3,7 @@
 #include "../../frontend/ast/AST.hpp"
 #include <vector>
 #include <string>
+#include <unordered_map>
 
 class SemanticAnalyzer {
 public:
@@ -17,18 +18,27 @@ public:
     Symbol* Lookup(const std::string &name);
 
     // toggle symbol emission
-    void SetEmitSymbol(bool v) { emitSymbol = v; }
-    bool EmitSymbol() const { return emitSymbol; }
+    // (emit symbol control removed; symbol emission is decided by caller)
 
 private:
     std::vector<SymbolTable> tables;
     int currentTable = -1; // index into tables
-    bool emitSymbol = true;
+    // emission control removed
+
+    // mapping from AST Block (or function body) nodes to created symbol table index
+    std::unordered_map<const ASTNode*, int> nodeScopeMap;
+    // map table id -> index in tables vector for fast parent lookup
+    std::unordered_map<int,int> tableIdIndexMap;
 
     int NewScope();
     void ExitScope();
 
     void Walk(const ASTNode *node);
+
+    // Two-pass analysis helpers
+    void DeclPass(const ASTNode *node);
+    void CheckPass(const ASTNode *node);
+    void CheckStmt(const ASTNode *node);
 
     // statement and expression handlers for semantic checks
     void HandleStmt(const ASTNode *node);

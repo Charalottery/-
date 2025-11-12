@@ -5,6 +5,7 @@
 #include "error/ErrorType.hpp"
 #include "frontend/parser/Parser.hpp"
 #include "midend/symbol/SemanticAnalyzer.hpp"
+#include "error/ErrorUtils.hpp"
 #include <fstream>
 #include <iostream>
 #include <algorithm>
@@ -35,77 +36,49 @@ int main() {
     TokenStream ts(lexer.GetTokenList());
     Parser parser(ts);
     auto tree = parser.ParseCompUnit();
-    // After the whole compilation flow (lexing + parsing), if any errors were recorded
-    // write them to error.txt sorted by line number. Otherwise write parser output.
-    if (ErrorRecorder::HasErrors()) {
-        auto errors = ErrorRecorder::GetErrors();
-        std::sort(errors.begin(), errors.end(), [](const Error &a, const Error &b){ return a.line < b.line; });
-        std::ofstream ef("error.txt");
-        for (const auto &e : errors) {
-            // write: ÐÐºÅ ´íÎóÀà±ðÂë
-            std::string code;
-            switch (e.type) {
-                case ErrorType::ILLEGAL_SYMBOL: code = "a"; break;
-                case ErrorType::REDEFINE: code = "b"; break;
-                case ErrorType::UNDEFINED: code = "c"; break;
-                case ErrorType::FUNC_PARAM_COUNT: code = "d"; break;
-                case ErrorType::FUNC_PARAM_TYPE: code = "e"; break;
-                case ErrorType::RETURN_VALUE_IN_VOID: code = "f"; break;
-                case ErrorType::MISSING_RETURN: code = "g"; break;
-                case ErrorType::ASSIGN_TO_CONST: code = "h"; break;
-                case ErrorType::MISS_SEMICN: code = "i"; break;
-                case ErrorType::MISS_RPARENT: code = "j"; break;
-                case ErrorType::MISS_RBRACK: code = "k"; break;
-                case ErrorType::PRINTF_MISMATCH: code = "l"; break;
-                case ErrorType::BAD_BREAK_CONTINUE: code = "m"; break;
-                default: code = "?"; break;
-            }
-            ef << e.line << " " << code << "\n";
-        }
-        // ensure no stale parser output remains
-        std::remove("parser.txt");
-        return 0;
-    }
-
-    // semantic analysis (build symbol table) and then write parser output as post-order traversal of AST (no errors present)
+    // Semantic analysis (build symbol table). We attempt it if an AST exists.
     SemanticAnalyzer analyzer;
-    analyzer.Analyze(tree.get());
-    // After semantic analysis, check if any semantic errors were recorded.
+    if (tree) analyzer.Analyze(tree.get());
+
+    // After the whole compilation flow (lexing + parsing + semantic), decide outputs:
+    // - If any errors were recorded, write only `error.txt` (sorted) and remove
+    //   any `symbol.txt`/`parser.txt`.
+    // - Otherwise, write only `symbol.txt` representing the filled symbol tables.
     if (ErrorRecorder::HasErrors()) {
         auto errors = ErrorRecorder::GetErrors();
+        // no debug prints here; write errors only to error.txt as intended
         std::sort(errors.begin(), errors.end(), [](const Error &a, const Error &b){ return a.line < b.line; });
         std::ofstream ef("error.txt");
         for (const auto &e : errors) {
-            std::string code;
-            switch (e.type) {
-                case ErrorType::ILLEGAL_SYMBOL: code = "a"; break;
-                case ErrorType::REDEFINE: code = "b"; break;
-                case ErrorType::UNDEFINED: code = "c"; break;
-                case ErrorType::FUNC_PARAM_COUNT: code = "d"; break;
-                case ErrorType::FUNC_PARAM_TYPE: code = "e"; break;
-                case ErrorType::RETURN_VALUE_IN_VOID: code = "f"; break;
-                case ErrorType::MISSING_RETURN: code = "g"; break;
-                case ErrorType::ASSIGN_TO_CONST: code = "h"; break;
-                case ErrorType::MISS_SEMICN: code = "i"; break;
-                case ErrorType::MISS_RPARENT: code = "j"; break;
-                case ErrorType::MISS_RBRACK: code = "k"; break;
-                case ErrorType::PRINTF_MISMATCH: code = "l"; break;
-                case ErrorType::BAD_BREAK_CONTINUE: code = "m"; break;
-                default: code = "?"; break;
-            }
+            std::string code = ErrorTypeToCode(e.type);
             ef << e.line << " " << code << "\n";
         }
-        // do not produce parser.txt or symbol.txt when there are errors
-        std::remove("parser.txt");
-        std::remove("symbol.txt");
+    // ensure only error.txt remains; remove any previous symbol output
+    std::remove("symbol.txt");
         return 0;
     }
 
-    // no errors ¡ª write parser.txt
+    // No errors: emit symbol.txt built from analyzer tables. Remove any previous error output.
     std::remove("error.txt");
-    std::remove("parser.txt");
-    std::ofstream pf("parser.txt");
-    if (tree) tree->PostOrderPrint(pf);
+    std::ofstream of("symbol.txt");
+    const auto &tables = analyzer.GetTables();
+    for (const auto &tbl : tables) {
+        for (const auto &sym : tbl.symbols) {
+            std::string tname;
+            if (sym.kind == Symbol::Kind::FUNC) {
+                tname = (sym.retype == 0) ? "VoidFunc" : "IntFunc";
+            } else if (sym.kind == Symbol::Kind::ARRAY) {
+                if (sym.isConst) tname = "ConstIntArray";
+                else if (sym.isStatic) tname = "StaticIntArray";
+                else tname = "IntArray";
+            } else { // VAR
+                if (sym.isConst) tname = "ConstInt";
+                else if (sym.isStatic) tname = "StaticInt";
+                else tname = "Int";
+            }
+            of << tbl.id << " " << sym.token << " " << tname << "\n";
+        }
+    }
 
     return 0;
 }

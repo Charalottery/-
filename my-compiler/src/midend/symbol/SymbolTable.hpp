@@ -13,7 +13,17 @@ struct SymbolTable {
     // insert symbol; returns index in symbols
     int Insert(const Symbol &s) {
         auto it = directory.find(s.token);
-        if (it != directory.end()) return -1; // already exists in this table
+        if (it != directory.end()) {
+            // already exists in this table -- check if it's the exact same
+            // symbol (idempotent insertion). If it's identical (same line
+            // and properties), return existing index silently. Otherwise
+            // report as duplicate by returning -1.
+            Symbol &existing = symbols[it->second];
+            if (existing.line == s.line && existing.kind == s.kind && existing.isConst == s.isConst && existing.isStatic == s.isStatic) {
+                return it->second; // idempotent: same declaration inserted twice
+            }
+            return -1; // real redefinition
+        }
         symbols.push_back(s);
         int idx = (int)symbols.size() - 1;
         directory[s.token] = idx;

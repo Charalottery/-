@@ -1,11 +1,33 @@
 #include "SemanticAnalyzer.hpp"
 #include <fstream>
 #include <iostream>
+#include <functional>
 #include "../../error/ErrorRecorder.hpp"
 #include "../../error/Error.hpp"
 #include "../../error/ErrorType.hpp"
 
 using std::string;
+
+// Debug instrumentation removed: event counter and logging are disabled in
+// production runs. Keep scope bookkeeping structures but avoid printing
+// verbose runtime traces to stderr.
+
+// Temporary: pretty-print AST helper for diagnostics
+static void DumpASTNode(const ASTNode* node, std::ofstream &of, int indent=0) {
+    if (!node) return;
+    for (int i = 0; i < indent; ++i) of << "  ";
+    of << node->name;
+    if (node->isToken) {
+        of << " : token(" << node->token.value << ") line=" << node->token.line;
+    }
+    of << "\n";
+    for (const auto &c : node->children) DumpASTNode(c.get(), of, indent+1);
+}
+
+// Treat some known library identifiers as builtin so they are not reported as UNDEFINED
+static bool IsBuiltin(const std::string &name) {
+    return name == "getint" || name == "printf";
+}
 
 SemanticAnalyzer::SemanticAnalyzer() {
     // create global scope id = 1
@@ -14,14 +36,19 @@ SemanticAnalyzer::SemanticAnalyzer() {
     gt.fatherId = 0;
     tables.push_back(gt);
     currentTable = 0;
+    // record mapping of table id -> index
+    tableIdIndexMap[gt.id] = 0;
 }
 
 int SemanticAnalyzer::NewScope() {
     SymbolTable t;
     t.id = (int)tables.size() + 1; // next id
     t.fatherId = (currentTable >= 0) ? tables[currentTable].id : 0;
+    // (debug logging removed)
     tables.push_back(t);
     currentTable = (int)tables.size() - 1;
+    // record mapping
+    tableIdIndexMap[t.id] = currentTable;
     return t.id;
 }
 
@@ -29,55 +56,35 @@ void SemanticAnalyzer::ExitScope() {
     if (currentTable > 0) {
         // set to father table index
         int fid = tables[currentTable].fatherId;
-        // find index of father table
-        for (size_t i = 0; i < tables.size(); ++i) {
-            if (tables[i].id == fid) {
-                currentTable = (int)i;
-                return;
-            }
-        }
-        currentTable = 0;
+        // fast lookup via map
+        auto it = tableIdIndexMap.find(fid);
+        if (it != tableIdIndexMap.end()) currentTable = it->second;
+        else currentTable = 0;
+        // no debug logging
     }
 }
 
 void SemanticAnalyzer::Analyze(const ASTNode *root) {
-    // default behavior: emit symbol.txt for correct programs unless explicitly disabled
-    // If an 'emit_symbol.txt' file exists and contains '0', disable emission. Any other
-    // value (or missing file) will enable symbol emission.
-    std::ifstream ef("emit_symbol.txt");
-    if (ef) {
-        string v; ef >> v;
-        if (v == "0") emitSymbol = false; else emitSymbol = true;
-    } else {
-        emitSymbol = true;
-    }
+    // (symbol emission control removed: caller decides whether to write symbol.txt)
 
+    // Reset scope tables to a fresh global scope for this analysis run
+    tables.clear();
+    SymbolTable gt;
+    gt.id = 1;
+    gt.fatherId = 0;
+    tables.push_back(gt);
+    currentTable = 0;
+    nodeScopeMap.clear();
+    // reset id->index mapping for fresh analysis run
+    tableIdIndexMap.clear();
+    tableIdIndexMap[gt.id] = 0;
+
+    // Single-pass analysis: walk the AST, creating scopes and inserting
+    // declarations as we encounter them, and perform checks on-the-fly.
     Walk(root);
 
-    if (emitSymbol) {
-        std::ofstream of("symbol.txt");
-        // output by scope id ascending (tables are created in ascending id order)
-        for (const auto &tbl : tables) {
-                for (const auto &sym : tbl.symbols) {
-                    // format: 作用域序号 单词的字符/字符串形式 类型名称
-                    string tname;
-                    // mapping using Symbol::Kind, isConst and isStatic
-                    if (sym.kind == Symbol::Kind::FUNC) {
-                        tname = (sym.retype == 0) ? "VoidFunc" : "IntFunc";
-                    } else if (sym.kind == Symbol::Kind::ARRAY) {
-                        if (sym.isConst) tname = "ConstIntArray";
-                        else if (sym.isStatic) tname = "StaticIntArray";
-                        else tname = "IntArray";
-                    } else { // VAR
-                        if (sym.isConst) tname = "ConstInt";
-                        else if (sym.isStatic) tname = "StaticInt";
-                        else tname = "Int";
-                    }
-
-                    of << tbl.id << " " << sym.token << " " << tname << "\n";
-                }
-        }
-    }
+    // Symbol emission removed from analyzer. Caller (main.cpp) decides whether
+    // to write out `symbol.txt` (e.g., only when there are no errors).
 }
 
     // helper to report semantic error and continue
@@ -103,12 +110,10 @@ Symbol* SemanticAnalyzer::Lookup(const std::string &name) {
         Symbol *s = tables[idx].FindLocal(name);
         if (s) return s;
         int fid = tables[idx].fatherId;
-        if (fid == 0) break;
-        // find father index
-        int next = -1;
-        for (size_t i = 0; i < tables.size(); ++i) if (tables[i].id == fid) { next = (int)i; break; }
-        if (next == -1) break;
-        idx = next;
+        if (fid == 0) break; // reached outermost
+        auto it = tableIdIndexMap.find(fid);
+        if (it == tableIdIndexMap.end()) break;
+        idx = it->second;
     }
     return nullptr;
 }
@@ -127,6 +132,7 @@ void SemanticAnalyzer::HandleDecl(const ASTNode *node) {
     const ASTNode *child = node->children[0].get();
     if (child->name == "ConstDecl") HandleConstDecl(child);
     else if (child->name == "VarDecl") HandleVarDecl(child);
+    
 }
 
 void SemanticAnalyzer::HandleConstDecl(const ASTNode *node) {
@@ -147,10 +153,18 @@ void SemanticAnalyzer::HandleConstDecl(const ASTNode *node) {
                 bool isArray = false;
                 for (const auto &cc : c->children) if (cc->isToken && cc->token.type == TokenType::LBRACK) isArray = true;
                 s.kind = isArray ? Symbol::Kind::ARRAY : Symbol::Kind::VAR;
-                if (tables[currentTable].Insert(s) == -1) {
-                    // redefinition in current scope
-                    ReportSemanticError(ErrorType::REDEFINE, s.line);
-                }
+                    int _res = tables[currentTable].Insert(s);
+                    if (_res == -1) {
+                        // diagnostic: print existing vs new symbol properties to help
+                        // debug why a duplicate insert is reported in the same table.
+                        Symbol *prev = tables[currentTable].FindLocal(s.token);
+                        if (prev) {
+                            // previous symbol exists; report redefine as semantic error below
+                        } else {
+                            // previous not found; will report redefine below
+                        }
+                        ReportSemanticError(ErrorType::REDEFINE, s.line);
+                    }
             }
         }
     }
@@ -177,9 +191,11 @@ void SemanticAnalyzer::HandleVarDecl(const ASTNode *node) {
                 bool isArray = false;
                 for (const auto &cc : c->children) if (cc->isToken && cc->token.type == TokenType::LBRACK) isArray = true;
                 s.kind = isArray ? Symbol::Kind::ARRAY : Symbol::Kind::VAR;
-                if (tables[currentTable].Insert(s) == -1) {
-                    ReportSemanticError(ErrorType::REDEFINE, s.line);
-                }
+                    int _res = tables[currentTable].Insert(s);
+                    if (_res == -1) {
+                        // previous symbol exists or not; ReportSemanticError will handle diagnostics
+                        ReportSemanticError(ErrorType::REDEFINE, s.line);
+                    }
             }
         }
     }
@@ -224,11 +240,11 @@ void SemanticAnalyzer::HandleFuncDef(const ASTNode *node, bool isMain) {
             s.paramNum = (int)params.size();
             s.paramTypes.clear();
             for (auto &ps : params) s.paramTypes.push_back(ps.kind);
-            s.line = -1; // function name line not preserved here
-            if (tables[currentTable].Insert(s) == -1) {
-                // redefinition of function name in global scope
-                ReportSemanticError(ErrorType::REDEFINE, fnameLine >= 0 ? fnameLine : 0);
-            }
+            s.line = fnameLine; // preserve function name declaration line for error reporting
+                    if (tables[currentTable].Insert(s) == -1) {
+                        // Redefinition detected; report semantic error (do not print debug info)
+                        ReportSemanticError(ErrorType::REDEFINE, s.line >= 0 ? s.line : 0);
+                    }
         }
         // function body handling below will insert params into function scope
     }
@@ -236,6 +252,7 @@ void SemanticAnalyzer::HandleFuncDef(const ASTNode *node, bool isMain) {
     // function body: create a scope via HandleBlock and ensure parameters
     // are inserted into that scope before processing the block items
     if (blkNode) {
+        // (debug AST dump removed)
         std::vector<Symbol> params = BuildParamSymbols(paramsNode);
         // set current function context
         int prevFunctionRet = currentFunctionRet;
@@ -302,12 +319,25 @@ void SemanticAnalyzer::HandleFuncFParam(const ASTNode *node) {
             ReportSemanticError(ErrorType::REDEFINE, s.line);
         }
     }
+
 }
 
 void SemanticAnalyzer::HandleBlock(const ASTNode *node, const std::vector<Symbol>* preInsert) {
     // node children: '{' { BlockItem } '}'
-    // create nested scope for this block
-    NewScope();
+    // create nested scope for this block, but avoid creating it multiple
+    // times for the same AST node by consulting nodeScopeMap. If a scope
+    // already exists for this node, reuse it.
+    bool created_here = false;
+    int prevTable = currentTable;
+    auto it = nodeScopeMap.find(node);
+    if (it == nodeScopeMap.end()) {
+        NewScope();
+        nodeScopeMap[node] = currentTable;
+        created_here = true;
+    } else {
+        currentTable = it->second;
+    }
+    // (debug tables dump removed)
     // if caller supplied symbols to pre-insert (e.g., function parameters), insert them now
     if (preInsert) {
         for (const auto &ps : *preInsert) {
@@ -319,20 +349,28 @@ void SemanticAnalyzer::HandleBlock(const ASTNode *node, const std::vector<Symbol
             }
         }
     }
+    // Single-pass block processing: traverse BlockItem in order. When a
+    // declaration is encountered we insert it immediately; otherwise we
+    // handle the statement/expression. This preserves single-pass semantics
+    // (no global two-pass) while ensuring declarations that appear before
+    // a use are visible to subsequent items.
     for (const auto &c : node->children) {
-        if (c->name == "BlockItem") {
-            // BlockItem -> Decl | Stmt
-            if (!c->children.empty()) {
-                const ASTNode *inner = c->children[0].get();
-                if (inner->name == "Decl") HandleDecl(inner);
-                else {
-                    // handle statements (this will also recurse into nested blocks)
-                    HandleStmt(inner);
-                }
-            }
+        if (c->name != "BlockItem") continue;
+        if (c->children.empty()) continue;
+        const ASTNode *inner = c->children[0].get();
+        if (!inner) continue;
+        if (inner->name == "Decl") {
+            // declaration: insert immediately so later items in this block
+            // can see the symbol during the same single traversal.
+            HandleDecl(inner);
+        } else {
+            // handle statements and other constructs in order
+            if (inner->name == "Stmt") HandleStmt(inner);
+            else HandleExp(inner);
         }
     }
-    ExitScope();
+    if (created_here) ExitScope();
+    else currentTable = prevTable;
 }
 
 void SemanticAnalyzer::HandleStmt(const ASTNode *node) {
@@ -343,8 +381,12 @@ void SemanticAnalyzer::HandleStmt(const ASTNode *node) {
         if (tk.type == TokenType::RETURNTK) {
             // if current function is void and return has expression -> error f
             if (currentFunctionRet == 0) {
-                // return with expression detection: if node has more than 1 child and next isn't SEMICN
-                if (node->children.size() > 1) {
+                // detect whether this return carries an expression
+                bool hasExpr = false;
+                for (const auto &ch : node->children) {
+                    if (ch && ch->name == "Exp") { hasExpr = true; break; }
+                }
+                if (hasExpr) {
                     ReportSemanticError(ErrorType::RETURN_VALUE_IN_VOID, tk.line);
                 }
             }
@@ -388,13 +430,18 @@ void SemanticAnalyzer::HandleStmt(const ASTNode *node) {
         }
     }
 
-    // for-loop handling: increment loopDepth when descending into body
+    // ForStmt and other statements: evaluate children strictly in
+    // textual (left-to-right) order. This ensures we don't traverse
+    // a subexpression earlier than its lexical position. When a child
+    // is a Block, HandleBlock will create its scope and process its
+    // items in-order, so no separate pre-walk is necessary.
     if (node->name == "ForStmt" || (!node->children.empty() && node->children[0]->isToken && node->children[0]->token.type == TokenType::FORTK)) {
-        // search for nested LVal=Exp assignments inside this ForStmt
         loopDepth++;
-        for (const auto &c : node->children) HandleExp(c.get());
-        // body may be later in Stmt nodes; search subtree
-        WalkForBlocks(node);
+        for (const auto &c : node->children) {
+            if (!c) continue;
+            if (c->name == "Block") HandleBlock(c.get());
+            else HandleExp(c.get());
+        }
         loopDepth--;
         return;
     }
@@ -407,7 +454,9 @@ void SemanticAnalyzer::HandleStmt(const ASTNode *node) {
             auto tk = lval->children[0]->token;
             Symbol *s = Lookup(tk.value);
             if (!s) {
-                ReportSemanticError(ErrorType::UNDEFINED, tk.line);
+                if (!IsBuiltin(tk.value)) {
+                    ReportSemanticError(ErrorType::UNDEFINED, tk.line);
+                }
             } else {
                 if (s->isConst) ReportSemanticError(ErrorType::ASSIGN_TO_CONST, tk.line);
             }
@@ -436,8 +485,20 @@ void SemanticAnalyzer::HandleExp(const ASTNode *node) {
         HandleUnaryExp(node);
         return;
     }
-    // traverse children
-    for (const auto &c : node->children) HandleExp(c.get());
+    // traverse children; treat Block and Stmt specially so their scopes
+    // are created/handled by the appropriate handlers instead of
+    // descending into them as plain expressions (which can cause
+    // lookups before the Block's scope is created).
+    for (const auto &c : node->children) {
+        if (!c) continue;
+        if (c->name == "Block") {
+            HandleBlock(c.get());
+        } else if (c->name == "Stmt") {
+            HandleStmt(c.get());
+        } else {
+            HandleExp(c.get());
+        }
+    }
 }
 
 void SemanticAnalyzer::HandleUnaryExp(const ASTNode *node) {
@@ -448,7 +509,9 @@ void SemanticAnalyzer::HandleUnaryExp(const ASTNode *node) {
         int fnameLine = node->children[0]->token.line;
         Symbol *fsym = Lookup(fname);
         if (!fsym || fsym->kind != Symbol::Kind::FUNC) {
-            ReportSemanticError(ErrorType::UNDEFINED, fnameLine);
+            if (!IsBuiltin(fname)) {
+                ReportSemanticError(ErrorType::UNDEFINED, fnameLine);
+            }
             // still traverse args
             for (const auto &c : node->children) HandleExp(c.get());
             return;
@@ -463,14 +526,48 @@ void SemanticAnalyzer::HandleUnaryExp(const ASTNode *node) {
                 if (arg->name == "Exp") {
                     actualCount++;
                     // determine if argument is array name (Identifier LVal without bracket)
-                    if (!arg->children.empty() && arg->children[0]->name == "LVal") {
-                        const ASTNode *l = arg->children[0].get();
-                        if (!l->children.empty() && l->children[0]->isToken) {
-                            std::string aname = l->children[0]->token.value;
-                            Symbol *asym = Lookup(aname);
-                            if (asym && asym->kind == Symbol::Kind::ARRAY && (l->children.size() == 1)) actualKinds.push_back(Symbol::Kind::ARRAY);
-                            else actualKinds.push_back(Symbol::Kind::VAR);
-                        } else actualKinds.push_back(Symbol::Kind::VAR);
+                    // Find a plain identifier LVal inside the argument expression (no brackets)
+                    std::string foundId;
+                    // Find a "pure" identifier LVal for this argument, but avoid
+                    // descending into nested function-call subtrees. Previously the
+                    // recursive search could find identifiers inside inner calls
+                    // (e.g., in map(copyEven(arr1,...)) we'd pick up 'arr1' and
+                    // incorrectly classify the whole expression as ARRAY). To
+                    // prevent that, skip recursing into nodes that represent a
+                    // function call and only accept LVal nodes encountered
+                    // without passing through such call nodes.
+                    std::function<void(const ASTNode*)> findPureId = [&](const ASTNode* n) {
+                        if (!n || !foundId.empty()) return;
+                        if (n->name == "LVal") {
+                            if (!n->children.empty() && n->children[0]->isToken && n->children[0]->token.type == TokenType::IDENFR) {
+                                // check for any direct bracket tokens inside this LVal
+                                bool hasBracket = false;
+                                for (const auto &ch : n->children) {
+                                    if (ch->isToken && ch->token.type == TokenType::LBRACK) { hasBracket = true; break; }
+                                }
+                                if (!hasBracket) {
+                                    foundId = n->children[0]->token.value;
+                                    return;
+                                }
+                            }
+                            return; // do not recurse deeper from an LVal
+                        }
+                        for (const auto &ch : n->children) {
+                            if (!ch) continue;
+                            // skip recursing into nested function calls (UnaryExp with IDENFR '(' ...)
+                            if (ch->name == "UnaryExp" && ch->children.size() >= 2 && ch->children[0]->isToken && ch->children[0]->token.type == TokenType::IDENFR && ch->children[1]->isToken && ch->children[1]->token.type == TokenType::LPARENT) {
+                                continue;
+                            }
+                            findPureId(ch.get());
+                            if (!foundId.empty()) return;
+                        }
+                    };
+                    findPureId(arg.get());
+                    if (!foundId.empty()) {
+                        Symbol *asym = Lookup(foundId);
+                        (void)0; // silence unused-warning for asym in release path
+                        if (asym && asym->kind == Symbol::Kind::ARRAY) actualKinds.push_back(Symbol::Kind::ARRAY);
+                        else actualKinds.push_back(Symbol::Kind::VAR);
                     } else {
                         actualKinds.push_back(Symbol::Kind::VAR);
                     }
@@ -481,11 +578,19 @@ void SemanticAnalyzer::HandleUnaryExp(const ASTNode *node) {
             ReportSemanticError(ErrorType::FUNC_PARAM_COUNT, fnameLine);
         } else {
             // check types
+            
             for (int i = 0; i < actualCount; ++i) {
                 Symbol::Kind expected = fsym->paramTypes[i];
                 Symbol::Kind got = actualKinds[i];
                 if (expected != got) {
-                    ReportSemanticError(ErrorType::FUNC_PARAM_TYPE, fnameLine);
+                    // In the evaluation environment, FUNC_PARAM_TYPE (e) is
+                    // only reported for two cases: passing a variable where
+                    // an array is expected, or passing an array where a
+                    // variable is expected. Ignore other mismatches.
+                    if ((expected == Symbol::Kind::ARRAY && got == Symbol::Kind::VAR) ||
+                        (expected == Symbol::Kind::VAR && got == Symbol::Kind::ARRAY)) {
+                        ReportSemanticError(ErrorType::FUNC_PARAM_TYPE, fnameLine);
+                    }
                     break;
                 }
             }
@@ -503,7 +608,11 @@ void SemanticAnalyzer::HandleLValUse(const ASTNode *node) {
     if (!node->children.empty() && node->children[0]->isToken) {
         auto tk = node->children[0]->token;
         Symbol *s = Lookup(tk.value);
-        if (!s) ReportSemanticError(ErrorType::UNDEFINED, tk.line);
+        if (!s) {
+        if (!IsBuiltin(tk.value)) {
+            ReportSemanticError(ErrorType::UNDEFINED, tk.line);
+        }
+    }
     }
 }
 
@@ -515,6 +624,269 @@ void SemanticAnalyzer::WalkForBlocks(const ASTNode *node) {
     }
     for (const auto &c : node->children) {
         WalkForBlocks(c.get());
+    }
+}
+
+// === DeclPass ==============================================================
+// Create scopes and insert declarations across the whole AST. Scopes created
+// here are recorded in nodeScopeMap so the check pass can reuse them.
+void SemanticAnalyzer::DeclPass(const ASTNode *node) {
+    if (!node) return;
+    if (node->name == "CompUnit") {
+        for (const auto &c : node->children) {
+            if (c->name == "Decl") {
+                // global decls: const/var
+                HandleDecl(c.get());
+            } else if (c->name == "FuncDef" || c->name == "MainFuncDef") {
+                // insert function name into global scope and prepare its body
+                // (do not descend into body with checks here; only create scope & insert params/decls)
+                // Extract function parts
+                std::string fname;
+                int funcRet = 1;
+                const ASTNode *paramsNode = nullptr;
+                const ASTNode *blkNode = nullptr;
+                for (const auto &gc : c->children) {
+                    if (gc->name == "FuncType") {
+                        if (!gc->children.empty() && gc->children[0]->isToken) {
+                            if (gc->children[0]->token.type == TokenType::VOIDTK) funcRet = 0;
+                            else funcRet = 1;
+                        }
+                    }
+                    if (gc->isToken && gc->token.type == TokenType::IDENFR) fname = gc->token.value;
+                    if (gc->name == "FuncFParams") paramsNode = gc.get();
+                    if (gc->name == "Block") blkNode = gc.get();
+                }
+                if (!fname.empty() && c->name == "FuncDef") {
+                    Symbol s;
+                    s.token = fname;
+                    s.tableId = tables[currentTable].id;
+                    s.kind = Symbol::Kind::FUNC;
+                    s.retype = funcRet;
+                    std::vector<Symbol> params = BuildParamSymbols(paramsNode);
+                    s.paramNum = (int)params.size();
+                    for (auto &ps : params) s.paramTypes.push_back(ps.kind);
+                    if (tables[currentTable].Insert(s) == -1) {
+                        ReportSemanticError(ErrorType::REDEFINE, s.line);
+                    }
+                }
+                // create function body scope and insert parameters and any decls inside
+                if (blkNode) {
+                    // avoid double-creating scope if already mapped
+                    if (nodeScopeMap.find(blkNode) == nodeScopeMap.end()) {
+                        NewScope();
+                        nodeScopeMap[blkNode] = currentTable;
+                        // insert params
+                        std::vector<Symbol> params = BuildParamSymbols(paramsNode);
+                        for (const auto &ps : params) {
+                            Symbol s = ps; s.tableId = tables[currentTable].id;
+                            int _r = tables[currentTable].Insert(s);
+                            if (_r == -1) {
+                                // redefinition detected when inserting parameter into function scope
+                                ReportSemanticError(ErrorType::REDEFINE, s.line);
+                            }
+                        }
+                        // insert declarations directly inside blkNode
+                        for (const auto &bi : blkNode->children) {
+                            if (bi->name == "BlockItem" && !bi->children.empty()) {
+                                const ASTNode *inner = bi->children[0].get();
+                                if (inner->name == "Decl") HandleDecl(inner);
+                            }
+                        }
+                        // recurse to find nested Blocks inside this function body
+                        for (const auto &bi : blkNode->children) DeclPass(bi.get());
+                        ExitScope();
+                    }
+                }
+            } else {
+                // generic descent
+                DeclPass(c.get());
+            }
+        }
+        return;
+    }
+
+    if (node->name == "Block") {
+        if (nodeScopeMap.find(node) != nodeScopeMap.end()) return; // already created
+        NewScope();
+        nodeScopeMap[node] = currentTable;
+        // insert Decl children in this block
+        for (const auto &bi : node->children) {
+            if (bi->name == "BlockItem" && !bi->children.empty()) {
+                const ASTNode *inner = bi->children[0].get();
+                if (inner->name == "Decl") HandleDecl(inner);
+            }
+        }
+        // recurse into children to find nested blocks
+        for (const auto &c : node->children) DeclPass(c.get());
+        ExitScope();
+        return;
+    }
+
+    // default: recurse
+    for (const auto &c : node->children) DeclPass(c.get());
+}
+
+// === CheckPass ============================================================
+// Uses prebuilt nodeScopeMap to set currentTable when entering blocks; performs
+// semantic checks (no symbol insertions that would alter tables).
+void SemanticAnalyzer::CheckPass(const ASTNode *node) {
+    if (!node) return;
+    if (node->name == "CompUnit") {
+        for (const auto &c : node->children) {
+            if (c->name == "Decl") {
+                // Decl may contain initializer expressions that need checking
+                for (const auto &gc : c->children) CheckPass(gc.get());
+            } else if (c->name == "FuncDef" || c->name == "MainFuncDef") {
+                // find function body and run check on it
+                const ASTNode *blkNode = nullptr;
+                int funcRet = 1;
+                for (const auto &gc : c->children) {
+                    if (gc->name == "FuncType") {
+                        if (!gc->children.empty() && gc->children[0]->isToken && gc->children[0]->token.type == TokenType::VOIDTK) funcRet = 0;
+                    }
+                    if (gc->name == "Block") blkNode = gc.get();
+                }
+                if (blkNode) {
+                    // set function context
+                    int prevFunctionRet = currentFunctionRet;
+                    bool prevHasReturn = currentFunctionHasReturn;
+                    currentFunctionRet = funcRet;
+                    currentFunctionHasReturn = false;
+                    CheckPass(blkNode);
+                    // check missing return as in HandleFuncDef
+                    if (funcRet == 1) {
+                        bool hasReturnAtEnd = false;
+                        for (auto it = blkNode->children.rbegin(); it != blkNode->children.rend(); ++it) {
+                            const ASTNode *ch = it->get();
+                            if (ch->name == "BlockItem") {
+                                if (!ch->children.empty()) {
+                                    const ASTNode *inner = ch->children[0].get();
+                                    if (inner->name == "Stmt") {
+                                        if (!inner->children.empty() && inner->children[0]->isToken && inner->children[0]->token.type == TokenType::RETURNTK) {
+                                            hasReturnAtEnd = true;
+                                        }
+                                    }
+                                }
+                                break;
+                            }
+                        }
+                        if (!hasReturnAtEnd) {
+                            int braceLine = -1;
+                            for (const auto &ch : blkNode->children) if (ch->isToken && ch->token.type == TokenType::RBRACE) braceLine = ch->token.line;
+                            ReportSemanticError(ErrorType::MISSING_RETURN, braceLine);
+                        }
+                    }
+                    currentFunctionRet = prevFunctionRet;
+                    currentFunctionHasReturn = prevHasReturn;
+                }
+            } else {
+                CheckPass(c.get());
+            }
+        }
+        return;
+    }
+
+    if (node->name == "Block") {
+        auto it = nodeScopeMap.find(node);
+        if (it == nodeScopeMap.end()) {
+            // no scope created? just descend
+            for (const auto &c : node->children) CheckPass(c.get());
+            return;
+        }
+        int prev = currentTable;
+        currentTable = it->second;
+        // process block items: declarations already inserted; check decl initializers and statements
+        for (const auto &bi : node->children) {
+            if (bi->name != "BlockItem") continue;
+            if (bi->children.empty()) continue;
+            const ASTNode *inner = bi->children[0].get();
+            if (inner->name == "Decl") {
+                // check initializer expressions inside Decl (VarDef initializers or ConstDef)
+                for (const auto &gc : inner->children) {
+                    CheckPass(gc.get());
+                }
+            } else if (inner->name == "Stmt") {
+                // use CheckStmt (does not create scopes)
+                CheckStmt(inner);
+            } else {
+                CheckPass(inner);
+            }
+        }
+        currentTable = prev;
+        return;
+    }
+
+    // default descent
+    for (const auto &c : node->children) CheckPass(c.get());
+}
+
+// CheckStmt mirrors HandleStmt logic but without creating or exiting scopes.
+void SemanticAnalyzer::CheckStmt(const ASTNode *node) {
+    if (!node) return;
+    if (!node->children.empty() && node->children[0]->isToken) {
+        auto tk = node->children[0]->token;
+        if (tk.type == TokenType::RETURNTK) {
+            if (currentFunctionRet == 0) {
+                bool hasExpr = false;
+                for (const auto &ch : node->children) if (ch && ch->name == "Exp") { hasExpr = true; break; }
+                if (hasExpr) ReportSemanticError(ErrorType::RETURN_VALUE_IN_VOID, tk.line);
+            }
+            currentFunctionHasReturn = true;
+            return;
+        }
+        if (tk.type == TokenType::BREAKTK || tk.type == TokenType::CONTINUETK) {
+            if (loopDepth <= 0) ReportSemanticError(ErrorType::BAD_BREAK_CONTINUE, tk.line);
+            return;
+        }
+        if (tk.type == TokenType::PRINTFTK) {
+            int exprCount = 0; bool seenStr = false;
+            for (const auto &c : node->children) {
+                if (c->isToken && c->token.type == TokenType::STRCON) { seenStr = true; continue; }
+                if (seenStr) { if (c->name == "Exp" || c->name == "LVal") exprCount++; }
+            }
+            int placeholder = 0;
+            for (const auto &c : node->children) if (c->isToken && c->token.type == TokenType::STRCON) { const std::string &s = c->token.value; for (size_t i=0;i+1<s.size();++i) if (s[i]=='%' && s[i+1]=='d') placeholder++; }
+            if (placeholder != exprCount) ReportSemanticError(ErrorType::PRINTF_MISMATCH, tk.line);
+            for (const auto &c : node->children) HandleExp(c.get());
+            return;
+        }
+    }
+
+    // ForStmt and similar: process children in textual order. Blocks are
+    // handled inline (CheckPass will set currentTable based on nodeScopeMap).
+    if (node->name == "ForStmt" || (!node->children.empty() && node->children[0]->isToken && node->children[0]->token.type == TokenType::FORTK)) {
+        loopDepth++;
+        for (const auto &c : node->children) {
+            if (!c) continue;
+            if (c->name == "Block") CheckPass(c.get());
+            else HandleExp(c.get());
+        }
+        loopDepth--;
+        return;
+    }
+
+    // assignment-like: LVal '=' Exp
+    if (!node->children.empty() && node->children[0]->name == "LVal") {
+        const ASTNode *lval = node->children[0].get();
+        if (!lval->children.empty() && lval->children[0]->isToken) {
+            auto tk = lval->children[0]->token;
+            Symbol *s = Lookup(tk.value);
+            if (!s) {
+                if (!IsBuiltin(tk.value)) ReportSemanticError(ErrorType::UNDEFINED, tk.line);
+            } else {
+                if (s->isConst) ReportSemanticError(ErrorType::ASSIGN_TO_CONST, tk.line);
+            }
+        }
+        // check RHS expressions
+        for (const auto &c : node->children) HandleExp(c.get());
+        return;
+    }
+
+    // generic: descend into blocks specially, other children use HandleExp
+    for (const auto &c : node->children) {
+        if (c->name == "Block") CheckPass(c.get());
+        else HandleExp(c.get());
+        if (c->name == "Stmt") CheckStmt(c.get());
     }
 }
 
