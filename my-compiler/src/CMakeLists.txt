@@ -20,6 +20,12 @@ file(GLOB_RECURSE EXTRA_FRONTEND_SOURCES
 list(REMOVE_ITEM EXTRA_FRONTEND_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/frontend/lexer/lexer.cpp)
 list(APPEND SRC_FILES ${EXTRA_FRONTEND_SOURCES})
 
+# Automatically pick up any additional .cpp files under midend/
+file(GLOB_RECURSE EXTRA_MID_SOURCES
+    ${CMAKE_CURRENT_SOURCE_DIR}/midend/*.cpp
+)
+list(APPEND SRC_FILES ${EXTRA_MID_SOURCES})
+
 # Create executable target
 add_executable(Compiler ${SRC_FILES})
 
@@ -30,6 +36,7 @@ target_include_directories(Compiler PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/error
     ${CMAKE_CURRENT_SOURCE_DIR}/frontend/parser
     ${CMAKE_CURRENT_SOURCE_DIR}/frontend/ast
+    ${CMAKE_CURRENT_SOURCE_DIR}/midend
 )
 
 # Compile options

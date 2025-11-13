@@ -4,6 +4,7 @@
 #include "error/ErrorRecorder.hpp"
 #include "error/ErrorType.hpp"
 #include "frontend/parser/Parser.hpp"
+#include "midend/SemanticAnalyzer.hpp"
 #include <fstream>
 #include <iostream>
 #include <algorithm>
@@ -49,6 +50,15 @@ int main() {
                 case ErrorType::MISS_SEMICN: code = "i"; break;
                 case ErrorType::MISS_RPARENT: code = "j"; break;
                 case ErrorType::MISS_RBRACK: code = "k"; break;
+                case ErrorType::NAME_REDEFINE: code = "b"; break;
+                case ErrorType::NAME_UNDEFINED: code = "c"; break;
+                case ErrorType::FUNC_PARAM_COUNT_MISMATCH: code = "d"; break;
+                case ErrorType::FUNC_PARAM_TYPE_MISMATCH: code = "e"; break;
+                case ErrorType::RETURN_IN_VOID: code = "f"; break;
+                case ErrorType::MISSING_RETURN: code = "g"; break;
+                case ErrorType::ASSIGN_TO_CONST: code = "h"; break;
+                case ErrorType::PRINTF_ARG_MISMATCH: code = "l"; break;
+                case ErrorType::BAD_BREAK_CONTINUE: code = "m"; break;
                 default: code = "?"; break;
             }
             ef << e.line << " " << code << "\n";
@@ -61,6 +71,39 @@ int main() {
     // write parser output as post-order traversal of AST (no errors present)
     std::remove("error.txt");
     std::remove("parser.txt");
+    // run semantic analysis (build symbol table) and optionally dump symbol.txt
+    midend::SemanticAnalyzer::SetDumpSymbols(true);
+    if (tree) midend::SemanticAnalyzer::Analyze(tree.get());
+
+    // After semantic analysis, if semantic errors were recorded write them to error.txt
+    if (ErrorRecorder::HasErrors()) {
+        auto errors = ErrorRecorder::GetErrors();
+        std::sort(errors.begin(), errors.end(), [](const Error &a, const Error &b){ return a.line < b.line; });
+        std::ofstream ef("error.txt");
+        for (const auto &e : errors) {
+            std::string code;
+            switch (e.type) {
+                case ErrorType::ILLEGAL_SYMBOL: code = "a"; break;
+                case ErrorType::MISS_SEMICN: code = "i"; break;
+                case ErrorType::MISS_RPARENT: code = "j"; break;
+                case ErrorType::MISS_RBRACK: code = "k"; break;
+                case ErrorType::NAME_REDEFINE: code = "b"; break;
+                case ErrorType::NAME_UNDEFINED: code = "c"; break;
+                case ErrorType::FUNC_PARAM_COUNT_MISMATCH: code = "d"; break;
+                case ErrorType::FUNC_PARAM_TYPE_MISMATCH: code = "e"; break;
+                case ErrorType::RETURN_IN_VOID: code = "f"; break;
+                case ErrorType::MISSING_RETURN: code = "g"; break;
+                case ErrorType::ASSIGN_TO_CONST: code = "h"; break;
+                case ErrorType::PRINTF_ARG_MISMATCH: code = "l"; break;
+                case ErrorType::BAD_BREAK_CONTINUE: code = "m"; break;
+                default: code = "?"; break;
+            }
+            ef << e.line << " " << code << "\n";
+        }
+        std::remove("parser.txt");
+        return 0;
+    }
+
     std::ofstream pf("parser.txt");
     if (tree) tree->PostOrderPrint(pf);
 
