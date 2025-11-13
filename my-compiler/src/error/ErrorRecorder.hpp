@@ -10,12 +10,12 @@ public:
     // report the same logical error.
     static void AddError(const Error &e) {
         auto &errs = GetErrorsRef();
+        // Ensure we record at most one error per line. The evaluation guarantees
+        // each line has at most one true error; record the first reported
+        // error for a given line and ignore subsequent reports for the same line.
         for (const auto &ex : errs) {
-            if (ex.type == e.type && ex.line == e.line) return; // duplicate, skip
+            if (ex.line == e.line) return; // already have an error for this line
         }
-        // Do not print diagnostics to stderr during normal runs; errors are
-        // recorded and written to error.txt by the caller. This avoids
-        // producing additional log output during automated testing.
         errs.push_back(e);
     }
     static const std::vector<Error>& GetErrors() { return GetErrorsRef(); }

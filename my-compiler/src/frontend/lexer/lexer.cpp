@@ -97,6 +97,7 @@ void Lexer::GenerateTokenList() {
         if (!tokenList.empty() && tokenList.back().type == TokenType::EOF_T) break;
         if (curPos >= source.size()) break;
     }
+    // no debug output here in normal runs
 }
 
 void Lexer::scanNumber() {

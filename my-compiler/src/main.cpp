@@ -53,8 +53,8 @@ int main() {
             std::string code = ErrorTypeToCode(e.type);
             ef << e.line << " " << code << "\n";
         }
-    // ensure only error.txt remains; remove any previous symbol output
-    std::remove("symbol.txt");
+        // ensure only error.txt remains; remove any previous symbol output
+        std::remove("symbol.txt");
         return 0;
     }
 

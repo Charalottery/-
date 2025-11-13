@@ -402,28 +402,25 @@ void SemanticAnalyzer::HandleStmt(const ASTNode *node) {
         }
         if (tk.type == TokenType::PRINTFTK) {
             // printf ( STRCON {, Exp } ) ;
-            // count number of Exp expressions after first STRCON
-            // find STRCON child in node->children
+            // Count placeholders '%d' in the first STRCON and count only
+            // AST children named 'Exp' after the STRCON as actual args.
             int exprCount = 0;
+            int placeholder = 0;
             bool seenStr = false;
             for (const auto &c : node->children) {
-                if (c->isToken && c->token.type == TokenType::STRCON) { seenStr = true; continue; }
-                if (seenStr) {
-                    // count expressions by looking for subtrees named Exp
-                    if (c->name == "Exp" || c->name == "LVal" || c->name == "AddExp" || c->name == "PrimaryExp") exprCount++;
-                }
-            }
-            // count placeholders '%d' in the string
-            int placeholder = 0;
-            for (const auto &c : node->children) {
                 if (c->isToken && c->token.type == TokenType::STRCON) {
-                    const std::string &s = c->token.value;
-                    for (size_t i = 0; i + 1 < s.size(); ++i) if (s[i] == '%' && s[i+1] == 'd') placeholder++;
+                    if (!seenStr) {
+                        const std::string &s = c->token.value;
+                        for (size_t i = 0; i + 1 < s.size(); ++i) if (s[i] == '%' && s[i+1] == 'd') placeholder++;
+                        seenStr = true;
+                    }
+                    continue;
+                }
+                if (seenStr) {
+                    if (c->name == "Exp") exprCount++;
                 }
             }
-            if (placeholder != exprCount) {
-                ReportSemanticError(ErrorType::PRINTF_MISMATCH, tk.line);
-            }
+            if (placeholder != exprCount) ReportSemanticError(ErrorType::PRINTF_MISMATCH, tk.line);
             // still check inner expressions for undefined/function calls
             for (const auto &c : node->children) HandleExp(c.get());
             return;
@@ -437,8 +434,67 @@ void SemanticAnalyzer::HandleStmt(const ASTNode *node) {
     // items in-order, so no separate pre-walk is necessary.
     if (node->name == "ForStmt" || (!node->children.empty() && node->children[0]->isToken && node->children[0]->token.type == TokenType::FORTK)) {
         loopDepth++;
-        for (const auto &c : node->children) {
+        // ForStmt children may contain comma-separated LVal '=' Exp sequences.
+        // Detect LVal (possibly wrapped inside an Exp node) followed by ASSIGN
+        // and treat it as a write (assignment) so that ASSIGN_TO_CONST / UNDEFINED
+        // checks run for for-header assigns.
+        for (size_t i = 0; i < node->children.size(); ++i) {
+            const auto &c = node->children[i];
             if (!c) continue;
+            // helper to check an AST node for a direct LVal '=' pattern
+            auto checkNodeForAssign = [&](const ASTNode* cand)->void {
+                if (!cand) return;
+                // case 1: direct LVal node
+                if (cand->name == "LVal") {
+                    if (!cand->children.empty() && cand->children[0]->isToken) {
+                        auto tk = cand->children[0]->token;
+                        Symbol *s = Lookup(tk.value);
+                        if (!s) {
+                            if (!IsBuiltin(tk.value)) ReportSemanticError(ErrorType::UNDEFINED, tk.line);
+                        } else {
+                            if (s->isConst) ReportSemanticError(ErrorType::ASSIGN_TO_CONST, tk.line);
+                        }
+                    }
+                    return;
+                }
+                // case 2: Exp wrapping an assignment like Exp -> LVal ASSIGN Exp
+                if (cand->name == "Exp" && cand->children.size() >= 2) {
+                    const ASTNode *first = cand->children[0].get();
+                    const ASTNode *second = cand->children[1].get();
+                    if (first && first->name == "LVal" && second && second->isToken && second->token.type == TokenType::ASSIGN) {
+                        if (!first->children.empty() && first->children[0]->isToken) {
+                            auto tk = first->children[0]->token;
+                            Symbol *s = Lookup(tk.value);
+                            if (!s) {
+                                if (!IsBuiltin(tk.value)) ReportSemanticError(ErrorType::UNDEFINED, tk.line);
+                            } else {
+                                if (s->isConst) ReportSemanticError(ErrorType::ASSIGN_TO_CONST, tk.line);
+                            }
+                        }
+                    }
+                }
+            };
+
+            // Check current child itself
+            checkNodeForAssign(c.get());
+            // If the child is a nested ForStmt (this Stmt may contain a ForStmt node),
+            // its own children can contain the LVal ASSIGN pattern (parse produced a nested ForStmt node).
+            if (c->name == "ForStmt") {
+                for (const auto &fc : c->children) {
+                    if (!fc) continue;
+                    checkNodeForAssign(fc.get());
+                    if (fc->name == "Block") HandleBlock(fc.get());
+                    else HandleExp(fc.get());
+                }
+                continue;
+            }
+            // Additionally, if current child is an LVal and next child is an ASSIGN token
+            if (c->name == "LVal" && i + 1 < node->children.size() && node->children[i+1]->isToken && node->children[i+1]->token.type == TokenType::ASSIGN) {
+                checkNodeForAssign(c.get());
+            }
+            // If current child is Exp, its first child might be LVal and second an ASSIGN
+            if (c->name == "Exp") checkNodeForAssign(c.get());
+
             if (c->name == "Block") HandleBlock(c.get());
             else HandleExp(c.get());
         }
@@ -839,13 +895,22 @@ void SemanticAnalyzer::CheckStmt(const ASTNode *node) {
             return;
         }
         if (tk.type == TokenType::PRINTFTK) {
-            int exprCount = 0; bool seenStr = false;
-            for (const auto &c : node->children) {
-                if (c->isToken && c->token.type == TokenType::STRCON) { seenStr = true; continue; }
-                if (seenStr) { if (c->name == "Exp" || c->name == "LVal") exprCount++; }
-            }
+            int exprCount = 0;
             int placeholder = 0;
-            for (const auto &c : node->children) if (c->isToken && c->token.type == TokenType::STRCON) { const std::string &s = c->token.value; for (size_t i=0;i+1<s.size();++i) if (s[i]=='%' && s[i+1]=='d') placeholder++; }
+            bool seenStr = false;
+            for (const auto &c : node->children) {
+                if (c->isToken && c->token.type == TokenType::STRCON) {
+                    if (!seenStr) {
+                        const std::string &s = c->token.value;
+                        for (size_t i = 0; i + 1 < s.size(); ++i) if (s[i] == '%' && s[i+1] == 'd') placeholder++;
+                        seenStr = true;
+                    }
+                    continue;
+                }
+                if (seenStr) {
+                    if (c->name == "Exp") exprCount++;
+                }
+            }
             if (placeholder != exprCount) ReportSemanticError(ErrorType::PRINTF_MISMATCH, tk.line);
             for (const auto &c : node->children) HandleExp(c.get());
             return;
@@ -856,8 +921,57 @@ void SemanticAnalyzer::CheckStmt(const ASTNode *node) {
     // handled inline (CheckPass will set currentTable based on nodeScopeMap).
     if (node->name == "ForStmt" || (!node->children.empty() && node->children[0]->isToken && node->children[0]->token.type == TokenType::FORTK)) {
         loopDepth++;
-        for (const auto &c : node->children) {
+        // Similar to HandleStmt: detect LVal '=' patterns in for header and
+        // perform assignment checks here in the CheckPass phase as well.
+        for (size_t i = 0; i < node->children.size(); ++i) {
+            const auto &c = node->children[i];
             if (!c) continue;
+            auto checkNodeForAssign = [&](const ASTNode* cand)->void {
+                if (!cand) return;
+                if (cand->name == "LVal") {
+                    if (!cand->children.empty() && cand->children[0]->isToken) {
+                        auto tk = cand->children[0]->token;
+                        Symbol *s = Lookup(tk.value);
+                        if (!s) {
+                            if (!IsBuiltin(tk.value)) ReportSemanticError(ErrorType::UNDEFINED, tk.line);
+                        } else {
+                            if (s->isConst) ReportSemanticError(ErrorType::ASSIGN_TO_CONST, tk.line);
+                        }
+                    }
+                    return;
+                }
+                if (cand->name == "Exp" && cand->children.size() >= 2) {
+                    const ASTNode *first = cand->children[0].get();
+                    const ASTNode *second = cand->children[1].get();
+                    if (first && first->name == "LVal" && second && second->isToken && second->token.type == TokenType::ASSIGN) {
+                        if (!first->children.empty() && first->children[0]->isToken) {
+                            auto tk = first->children[0]->token;
+                            Symbol *s = Lookup(tk.value);
+                            if (!s) {
+                                if (!IsBuiltin(tk.value)) ReportSemanticError(ErrorType::UNDEFINED, tk.line);
+                            } else {
+                                if (s->isConst) ReportSemanticError(ErrorType::ASSIGN_TO_CONST, tk.line);
+                            }
+                        }
+                    }
+                }
+            };
+
+            checkNodeForAssign(c.get());
+            if (c->name == "ForStmt") {
+                for (const auto &fc : c->children) {
+                    if (!fc) continue;
+                    checkNodeForAssign(fc.get());
+                    if (fc->name == "Block") CheckPass(fc.get());
+                    else HandleExp(fc.get());
+                }
+                continue;
+            }
+            if (c->name == "LVal" && i + 1 < node->children.size() && node->children[i+1]->isToken && node->children[i+1]->token.type == TokenType::ASSIGN) {
+                checkNodeForAssign(c.get());
+            }
+            if (c->name == "Exp") checkNodeForAssign(c.get());
+
             if (c->name == "Block") CheckPass(c.get());
             else HandleExp(c.get());
         }
