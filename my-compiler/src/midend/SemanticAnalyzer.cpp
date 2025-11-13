@@ -6,6 +6,7 @@
 #include "../error/Error.hpp"
 #include <fstream>
 #include <algorithm>
+#include <iostream>
 
 using namespace midend;
 
@@ -13,7 +14,7 @@ bool SemanticAnalyzer::dumpSymbols = true; // default enable for now
 
 // semantic state
 static std::string currentFuncReturnType = "";
-static bool currentFuncHasReturn = false;
+// we only consider a function 'has return at end' if its body ends with a return statement
 static int loopDepth = 0;
 
 void SemanticAnalyzer::Analyze(const ASTNode* root) {
@@ -67,13 +68,6 @@ static bool ExprIsArray(const ASTNode* node) {
     }
     for (const auto &c : node->children) if (ExprIsArray(c.get())) return true;
     return false;
-}
-
-static int CountFuncRParams(const ASTNode* params) {
-    if (!params) return 0;
-    int cnt = 0;
-    for (const auto &c : params->children) if (c->name == "Exp") ++cnt;
-    return cnt;
 }
 
 static std::vector<const ASTNode*> GetFuncRParamExprs(const ASTNode* params) {
@@ -142,7 +136,6 @@ void SemanticAnalyzer::ProcessCompUnit(const ASTNode* node) {
             }
             // set current function context
             currentFuncReturnType = funcType;
-            currentFuncHasReturn = false;
 
             // create function inner scope
             SymbolManager::CreateScope();
@@ -154,28 +147,81 @@ void SemanticAnalyzer::ProcessCompUnit(const ASTNode* node) {
             // leave function scope
             SymbolManager::ExitScope();
 
-            // check missing return for non-void
-            if (currentFuncReturnType == "int" && !currentFuncHasReturn) {
-                int braceLine = GetBlockRBraceLine(c.get());
-                if (braceLine < 0) braceLine = 0;
-                ErrorRecorder::AddError(Error(ErrorType::MISSING_RETURN, braceLine));
+            // check missing trailing return for non-void functions
+            if (currentFuncReturnType == "int") {
+                // find Block and check whether last statement is a return
+                bool hasTrailingReturn = false;
+                for (const auto &ch : c->children) {
+                    if (ch->name == "Block") {
+                        // iterate block children in reverse to find last Stmt
+                        for (int i = (int)ch->children.size() - 1; i >= 0; --i) {
+                            const ASTNode* item = ch->children[i].get();
+                            if (!item) continue;
+                            if (item->name == "BlockItem") {
+                                // BlockItem -> Decl | Stmt, so its child [0] is Decl or Stmt
+                                if (!item->children.empty()) {
+                                    const ASTNode* inner = item->children.back().get();
+                                    if (inner && inner->name == "Stmt") {
+                                        if (!inner->children.empty() && inner->children[0]->isToken && inner->children[0]->token.type == TokenType::RETURNTK) {
+                                            hasTrailingReturn = true;
+                                        }
+                                        break;
+                                    }
+                                }
+                            } else if (item->name == "Stmt") {
+                                if (!item->children.empty() && item->children[0]->isToken && item->children[0]->token.type == TokenType::RETURNTK) {
+                                    hasTrailingReturn = true;
+                                }
+                                break;
+                            }
+                        }
+                    }
+                }
+                if (!hasTrailingReturn) {
+                    int braceLine = GetBlockRBraceLine(c.get());
+                    if (braceLine < 0) braceLine = 0;
+                    ErrorRecorder::AddError(Error(ErrorType::MISSING_RETURN, braceLine));
+                }
             }
             currentFuncReturnType.clear();
-            currentFuncHasReturn = false;
         } else if (c->name == "MainFuncDef") {
             // main is treated like a function: create main function scope but do not add main to symbol table
             currentFuncReturnType = "int";
-            currentFuncHasReturn = false;
             SymbolManager::CreateScope();
             for (const auto &ch : c->children) ProcessNodeRec(ch.get(), false);
             SymbolManager::ExitScope();
-            if (!currentFuncHasReturn) {
+            // check missing trailing return for main (int)
+            bool hasTrailingReturn = false;
+            for (const auto &ch : c->children) {
+                if (ch->name == "Block") {
+                    for (int i = (int)ch->children.size() - 1; i >= 0; --i) {
+                        const ASTNode* item = ch->children[i].get();
+                        if (!item) continue;
+                        if (item->name == "BlockItem") {
+                            if (!item->children.empty()) {
+                                const ASTNode* inner = item->children.back().get();
+                                if (inner && inner->name == "Stmt") {
+                                    if (!inner->children.empty() && inner->children[0]->isToken && inner->children[0]->token.type == TokenType::RETURNTK) {
+                                        hasTrailingReturn = true;
+                                    }
+                                    break;
+                                }
+                            }
+                        } else if (item->name == "Stmt") {
+                            if (!item->children.empty() && item->children[0]->isToken && item->children[0]->token.type == TokenType::RETURNTK) {
+                                hasTrailingReturn = true;
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+            if (!hasTrailingReturn) {
                 int braceLine = GetBlockRBraceLine(c.get());
                 if (braceLine < 0) braceLine = 0;
                 ErrorRecorder::AddError(Error(ErrorType::MISSING_RETURN, braceLine));
             }
             currentFuncReturnType.clear();
-            currentFuncHasReturn = false;
         }
     }
 }
@@ -198,6 +244,24 @@ void SemanticAnalyzer::ProcessNodeRec(const ASTNode* node, bool createScopeForBl
 
     // ForStmt (loop) handling
     if (node->name == "ForStmt") {
+        // detect assignment in for-init like: LVal '=' Exp  (e.g. for(i = 0; ...))
+        for (size_t i = 0; i + 1 < node->children.size(); ++i) {
+            const ASTNode* a = node->children[i].get();
+            const ASTNode* b = node->children[i+1].get();
+            if (a && a->name == "LVal" && b && b->isToken && b->token.type == TokenType::ASSIGN) {
+                std::string id = GetIdent(a);
+                int line = GetIdentLine(a);
+                if (!id.empty()) {
+                    Symbol* s = SymbolManager::Lookup(id);
+                    if (!s) {
+                        ErrorRecorder::AddError(Error(ErrorType::NAME_UNDEFINED, line));
+                    } else {
+                        if (s->isConst) ErrorRecorder::AddError(Error(ErrorType::ASSIGN_TO_CONST, line));
+                    }
+                }
+                break;
+            }
+        }
         ++loopDepth;
         for (const auto &c : node->children) ProcessNodeRec(c.get(), true);
         --loopDepth;
@@ -228,7 +292,6 @@ void SemanticAnalyzer::ProcessNodeRec(const ASTNode* node, bool createScopeForBl
                         int line = first->token.line;
                         bool hasExp = false;
                         for (const auto &c : node->children) if (c->name == "Exp") { hasExp = true; break; }
-                        currentFuncHasReturn = true;
                         if (currentFuncReturnType == "void" && hasExp) {
                             ErrorRecorder::AddError(Error(ErrorType::RETURN_IN_VOID, line));
                         }
@@ -429,6 +492,8 @@ void SemanticAnalyzer::DumpSymbolFile() {
     for (auto *t : tables) {
         if (!t) continue;
         for (const auto &s : t->symbols) {
+            // skip builtin/runtime symbols from symbol.txt output
+            if (s.isBuiltin) continue;
             of << t->id << " " << s.name << " " << s.typeName << '\n';
         }
     }

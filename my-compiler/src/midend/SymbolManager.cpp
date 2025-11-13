@@ -13,6 +13,15 @@ void SymbolManager::Init() {
     nextId = 1;
     root = new SymbolTable(nextId, nullptr);
     current = root;
+    // register builtin/runtime functions so they are not reported as undefined
+    // getint(): returns int, no params
+    Symbol getintSym("getint", "IntFunc", true, std::vector<std::string>() , 0);
+    getintSym.isBuiltin = true;
+    root->AddSymbol(getintSym);
+    // printf(format, ...): treat as void function (format checking is done in parser/stmt)
+    Symbol printfSym("printf", "VoidFunc", true, std::vector<std::string>() , 0);
+    printfSym.isBuiltin = true;
+    root->AddSymbol(printfSym);
 }
 
 SymbolTable* SymbolManager::GetRoot() { return root; }

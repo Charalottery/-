@@ -35,38 +35,7 @@ int main() {
     TokenStream ts(lexer.GetTokenList());
     Parser parser(ts);
     auto tree = parser.ParseCompUnit();
-    // After the whole compilation flow (lexing + parsing), if any errors were recorded
-    // write them to error.txt sorted by line number. Otherwise write parser output.
-    if (ErrorRecorder::HasErrors()) {
-        auto errors = ErrorRecorder::GetErrors();
-        std::sort(errors.begin(), errors.end(), [](const Error &a, const Error &b){ return a.line < b.line; });
-        std::ofstream ef("error.txt");
-        for (const auto &e : errors) {
-            // write: ÐÐºÅ ´íÎóÀà±ðÂë
-            // Map ErrorType -> spec code: illegal symbol -> 'a', missing semicolon -> 'i', missing ')' -> 'j', missing ']' -> 'k'
-            std::string code;
-            switch (e.type) {
-                case ErrorType::ILLEGAL_SYMBOL: code = "a"; break;
-                case ErrorType::MISS_SEMICN: code = "i"; break;
-                case ErrorType::MISS_RPARENT: code = "j"; break;
-                case ErrorType::MISS_RBRACK: code = "k"; break;
-                case ErrorType::NAME_REDEFINE: code = "b"; break;
-                case ErrorType::NAME_UNDEFINED: code = "c"; break;
-                case ErrorType::FUNC_PARAM_COUNT_MISMATCH: code = "d"; break;
-                case ErrorType::FUNC_PARAM_TYPE_MISMATCH: code = "e"; break;
-                case ErrorType::RETURN_IN_VOID: code = "f"; break;
-                case ErrorType::MISSING_RETURN: code = "g"; break;
-                case ErrorType::ASSIGN_TO_CONST: code = "h"; break;
-                case ErrorType::PRINTF_ARG_MISMATCH: code = "l"; break;
-                case ErrorType::BAD_BREAK_CONTINUE: code = "m"; break;
-                default: code = "?"; break;
-            }
-            ef << e.line << " " << code << "\n";
-        }
-        // ensure no stale parser output remains
-        std::remove("parser.txt");
-        return 0;
-    }
+    // continue to semantic analysis even if parsing recorded errors
 
     // write parser output as post-order traversal of AST (no errors present)
     std::remove("error.txt");
@@ -77,10 +46,20 @@ int main() {
 
     // After semantic analysis, if semantic errors were recorded write them to error.txt
     if (ErrorRecorder::HasErrors()) {
-        auto errors = ErrorRecorder::GetErrors();
-        std::sort(errors.begin(), errors.end(), [](const Error &a, const Error &b){ return a.line < b.line; });
+        // preserve detection order, keep only the first error per line
+        auto all = ErrorRecorder::GetErrors();
+        std::vector<Error> picked;
+        std::unordered_set<int> seenLines;
+        for (const auto &e : all) {
+            if (seenLines.find(e.line) == seenLines.end()) {
+                picked.push_back(e);
+                seenLines.insert(e.line);
+            }
+        }
+        // sort by line number ascending for output
+        std::sort(picked.begin(), picked.end(), [](const Error &a, const Error &b){ return a.line < b.line; });
         std::ofstream ef("error.txt");
-        for (const auto &e : errors) {
+        for (const auto &e : picked) {
             std::string code;
             switch (e.type) {
                 case ErrorType::ILLEGAL_SYMBOL: code = "a"; break;

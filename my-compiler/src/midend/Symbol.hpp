@@ -12,6 +12,7 @@ struct Symbol {
     // additional fields for later use (dimension, init values etc.)
     int dimension = 0;
     int line = -1;
+    bool isBuiltin = false;
 
     Symbol() = default;
     Symbol(std::string n, std::string t, bool s = false, int d = 0, bool isConst_ = false, int line_ = -1)
