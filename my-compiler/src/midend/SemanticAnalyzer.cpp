@@ -22,7 +22,8 @@ void SemanticAnalyzer::Analyze(const ASTNode* root) {
     // init symbol manager
     SymbolManager::Init();
     ProcessCompUnit(root);
-    if (dumpSymbols) DumpSymbolFile();
+    // Only dump symbols if requested and no semantic errors were recorded
+    if (dumpSymbols && !ErrorRecorder::HasErrors()) DumpSymbolFile();
 }
 
 static int CountImmediateToken(const ASTNode* node, TokenType t) {
@@ -55,19 +56,41 @@ static std::string FindIdent(const ASTNode* node) {
 }
 
 // determine whether expression node denotes an array variable being passed
+// Helper: follow single-child non-token chains to find a leaf LVal node; return pointer or nullptr
+static const ASTNode* FindLeafLVal(const ASTNode* node) {
+    if (!node) return nullptr;
+    if (node->name == "LVal") return node;
+    // if this node is a function-call UnaryExp like IDENFR LPARENT ..., it's not a pure LVal
+    if (node->name == "UnaryExp" && node->children.size() >= 2) {
+        if (node->children[0]->isToken && node->children[0]->token.type == TokenType::IDENFR
+            && node->children[1]->isToken && node->children[1]->token.type == TokenType::LPARENT) {
+            return nullptr;
+        }
+    }
+    // count non-token children
+    const ASTNode* childNode = nullptr;
+    int nonTokenCount = 0;
+    for (const auto &c : node->children) {
+        if (!c->isToken) {
+            childNode = c.get();
+            ++nonTokenCount;
+        }
+    }
+    if (nonTokenCount == 1) return FindLeafLVal(childNode);
+    return nullptr;
+}
+
+// determine whether expression node denotes an array variable being passed
 static bool ExprIsArray(const ASTNode* node) {
     if (!node) return false;
-    if (node->name == "LVal") {
-        if (CountImmediateToken(node, TokenType::LBRACK) > 0) return false; // element access -> int
-        std::string id;
-        if ((id = FindIdent(node)).size() > 0) {
-            Symbol* s = SymbolManager::Lookup(id);
-            if (s && s->typeName.find("Array") != std::string::npos) return true;
-        }
-        return false;
-    }
-    for (const auto &c : node->children) if (ExprIsArray(c.get())) return true;
-    return false;
+    const ASTNode* leaf = FindLeafLVal(node);
+    if (!leaf) return false;
+    // leaf is LVal; if it has immediate '[' tokens it's an indexed access -> int
+    if (CountImmediateToken(leaf, TokenType::LBRACK) > 0) return false;
+    std::string id = FindIdent(leaf);
+    if (id.empty()) return false;
+    Symbol* s = SymbolManager::Lookup(id);
+    return s && s->typeName.find("Array") != std::string::npos;
 }
 
 static std::vector<const ASTNode*> GetFuncRParamExprs(const ASTNode* params) {

@@ -37,9 +37,9 @@ int main() {
     auto tree = parser.ParseCompUnit();
     // continue to semantic analysis even if parsing recorded errors
 
-    // write parser output as post-order traversal of AST (no errors present)
+    // remove any previous outputs before running analysis
     std::remove("error.txt");
-    std::remove("parser.txt");
+    std::remove("symbol.txt");
     // run semantic analysis (build symbol table) and optionally dump symbol.txt
     midend::SemanticAnalyzer::SetDumpSymbols(true);
     if (tree) midend::SemanticAnalyzer::Analyze(tree.get());
@@ -82,9 +82,6 @@ int main() {
         std::remove("parser.txt");
         return 0;
     }
-
-    std::ofstream pf("parser.txt");
-    if (tree) tree->PostOrderPrint(pf);
 
     return 0;
 }
