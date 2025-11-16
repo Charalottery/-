@@ -1,5 +1,5 @@
 #pragma once
-#include "../frontend/ast/AST.hpp"
+#include "../../frontend/ast/AST.hpp"
 #include <string>
 
 namespace midend {

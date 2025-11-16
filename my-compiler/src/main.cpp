@@ -4,7 +4,7 @@
 #include "error/ErrorRecorder.hpp"
 #include "error/ErrorType.hpp"
 #include "frontend/parser/Parser.hpp"
-#include "midend/SemanticAnalyzer.hpp"
+#include "midend/analysis/SemanticAnalyzer.hpp"
 #include <fstream>
 #include <iostream>
 #include <algorithm>

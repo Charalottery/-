@@ -1,9 +1,9 @@
 #include "SemanticAnalyzer.hpp"
-#include "SymbolManager.hpp"
-#include "Symbol.hpp"
-#include "../error/ErrorRecorder.hpp"
-#include "../error/ErrorType.hpp"
-#include "../error/Error.hpp"
+#include "../symbol/SymbolManager.hpp"
+#include "../symbol/Symbol.hpp"
+#include "../../error/ErrorRecorder.hpp"
+#include "../../error/ErrorType.hpp"
+#include "../../error/Error.hpp"
 #include <fstream>
 #include <algorithm>
 #include <iostream>

@@ -1,7 +1,7 @@
 #include "SymbolManager.hpp"
-#include "../error/ErrorRecorder.hpp"
-#include "../error/ErrorType.hpp"
-#include "../error/Error.hpp"
+#include "../../error/ErrorRecorder.hpp"
+#include "../../error/ErrorType.hpp"
+#include "../../error/Error.hpp"
 #include <algorithm>
 
 SymbolTable* SymbolManager::root = nullptr;

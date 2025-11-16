@@ -37,6 +37,8 @@ target_include_directories(Compiler PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/frontend/parser
     ${CMAKE_CURRENT_SOURCE_DIR}/frontend/ast
     ${CMAKE_CURRENT_SOURCE_DIR}/midend
+    ${CMAKE_CURRENT_SOURCE_DIR}/midend/analysis
+    ${CMAKE_CURRENT_SOURCE_DIR}/midend/symbol
 )
 
 # Compile options
