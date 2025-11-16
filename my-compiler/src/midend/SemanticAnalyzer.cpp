@@ -90,7 +90,7 @@ static bool ExprIsArray(const ASTNode* node) {
     std::string id = FindIdent(leaf);
     if (id.empty()) return false;
     Symbol* s = SymbolManager::Lookup(id);
-    return s && s->typeName.find("Array") != std::string::npos;
+    return s && s->isArray;
 }
 
 static std::vector<const ASTNode*> GetFuncRParamExprs(const ASTNode* params) {
@@ -155,6 +155,9 @@ void SemanticAnalyzer::ProcessCompUnit(const ASTNode* node) {
                 else if (funcType == "int") outType = "IntFunc";
 
                 Symbol s(funcName, outType, true, paramTypes, funcLine);
+                // populate paramIsArray based on paramTypes strings
+                s.paramIsArray.resize(paramTypes.size());
+                for (size_t i = 0; i < paramTypes.size(); ++i) s.paramIsArray[i] = (paramTypes[i].find("Array") != std::string::npos);
                 SymbolManager::AddSymbol(s);
             }
             // set current function context
@@ -282,7 +285,7 @@ void SemanticAnalyzer::ProcessNodeRec(const ASTNode* node, bool createScopeForBl
                         if (s->isConst) ErrorRecorder::AddError(Error(ErrorType::ASSIGN_TO_CONST, line));
                     }
                 }
-                break;
+                // continue scanning remaining comma-separated inits so we catch all const assignments
             }
         }
         ++loopDepth;
@@ -370,6 +373,9 @@ void SemanticAnalyzer::ProcessNodeRec(const ASTNode* node, bool createScopeForBl
                 Symbol* fsym = SymbolManager::Lookup(fname);
                 if (!fsym) {
                     ErrorRecorder::AddError(Error(ErrorType::NAME_UNDEFINED, line));
+                } else if (!fsym->isFunction) {
+                    // symbol exists but is not a function -> undefined for call-site
+                    ErrorRecorder::AddError(Error(ErrorType::NAME_UNDEFINED, line));
                 } else {
                     // check param count and types
                     std::vector<const ASTNode*> args;
@@ -383,7 +389,8 @@ void SemanticAnalyzer::ProcessNodeRec(const ASTNode* node, bool createScopeForBl
                     } else {
                         for (int i = 0; i < argCount; ++i) {
                             bool argIsArray = ExprIsArray(args[i]);
-                            bool expectArray = (fsym->paramTypes[i].find("Array") != std::string::npos);
+                            bool expectArray = false;
+                            if (i >= 0 && i < (int)fsym->paramIsArray.size()) expectArray = fsym->paramIsArray[i];
                             if (argIsArray != expectArray) {
                                 ErrorRecorder::AddError(Error(ErrorType::FUNC_PARAM_TYPE_MISMATCH, line));
                                 break;
