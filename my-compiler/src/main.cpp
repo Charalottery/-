@@ -27,6 +27,12 @@ int main() {
         input.erase(0, 3);
     }
 
+    // remove any previous outputs before running analysis
+    std::remove("lexer.txt");
+    std::remove("parser.txt");
+    std::remove("symbol.txt");
+    std::remove("error.txt");
+
     Lexer lexer(input);
     // Let the lexer produce the full token list itself.
     lexer.GenerateTokenList();
@@ -35,53 +41,34 @@ int main() {
     TokenStream ts(lexer.GetTokenList());
     Parser parser(ts);
     auto tree = parser.ParseCompUnit();
-    // continue to semantic analysis even if parsing recorded errors
 
-    // remove any previous outputs before running analysis
-    std::remove("error.txt");
-    std::remove("symbol.txt");
     // run semantic analysis (build symbol table) and optionally dump symbol.txt
     midend::SemanticAnalyzer::SetDumpSymbols(true);
     if (tree) midend::SemanticAnalyzer::Analyze(tree.get());
 
     // After semantic analysis, if semantic errors were recorded write them to error.txt
     if (ErrorRecorder::HasErrors()) {
-        // preserve detection order, keep only the first error per line
-        auto all = ErrorRecorder::GetErrors();
-        std::vector<Error> picked;
-        std::unordered_set<int> seenLines;
-        for (const auto &e : all) {
-            if (seenLines.find(e.line) == seenLines.end()) {
-                picked.push_back(e);
-                seenLines.insert(e.line);
-            }
-        }
-        // sort by line number ascending for output
-        std::sort(picked.begin(), picked.end(), [](const Error &a, const Error &b){ return a.line < b.line; });
-        std::ofstream ef("error.txt");
-        for (const auto &e : picked) {
-            std::string code;
-            switch (e.type) {
-                case ErrorType::ILLEGAL_SYMBOL: code = "a"; break;
-                case ErrorType::MISS_SEMICN: code = "i"; break;
-                case ErrorType::MISS_RPARENT: code = "j"; break;
-                case ErrorType::MISS_RBRACK: code = "k"; break;
-                case ErrorType::NAME_REDEFINE: code = "b"; break;
-                case ErrorType::NAME_UNDEFINED: code = "c"; break;
-                case ErrorType::FUNC_PARAM_COUNT_MISMATCH: code = "d"; break;
-                case ErrorType::FUNC_PARAM_TYPE_MISMATCH: code = "e"; break;
-                case ErrorType::RETURN_IN_VOID: code = "f"; break;
-                case ErrorType::MISSING_RETURN: code = "g"; break;
-                case ErrorType::ASSIGN_TO_CONST: code = "h"; break;
-                case ErrorType::PRINTF_ARG_MISMATCH: code = "l"; break;
-                case ErrorType::BAD_BREAK_CONTINUE: code = "m"; break;
-                default: code = "?"; break;
-            }
-            ef << e.line << " " << code << "\n";
-        }
+        // on error: only emit error.txt
+        ErrorRecorder::DumpErrors("error.txt");
+        // ensure other outputs are not present
+        std::remove("lexer.txt");
         std::remove("parser.txt");
+        std::remove("symbol.txt");
         return 0;
     }
+
+    // no errors: emit lexer and parser outputs and keep symbol.txt (if produced)
+    {
+        std::ofstream lf("lexer.txt");
+        for (const auto &t : lexer.GetTokenList()) lf << t << "\n";
+    }
+    if (tree) {
+        std::ofstream pf("parser.txt");
+        tree->PostOrderPrint(pf);
+    }
+
+    // ensure no stale error file
+    std::remove("error.txt");
 
     return 0;
 }

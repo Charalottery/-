@@ -2,7 +2,8 @@ CC = D:/msys64/mingw64/bin/g++.exe
 CFLAGS = -g -Wall -std=c++17
 
 SRCS = main.cpp frontend/lexer/lexer.cpp frontend/parser/Parser.cpp \
-	midend/symbol/SymbolManager.cpp midend/analysis/SemanticAnalyzer.cpp
+	midend/symbol/SymbolManager.cpp midend/analysis/SemanticAnalyzer.cpp \
+	error/ErrorRecorder.cpp
 TARGET = Compiler.exe
 
 .PHONY: all clean
