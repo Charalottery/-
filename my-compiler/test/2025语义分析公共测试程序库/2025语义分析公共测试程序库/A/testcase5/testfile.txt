@@ -1,18 +1,16 @@
-const int a = 2, b[3 = {1, 2, 3};//k
+const int a = 2, b[3] = {1, 2, 3};
 int arr1[3] = {1};
 int c = b[a];
 
-int getNumber({//j
+int getNumber(){
     static int x = 0;
-    x = x + 1   //i
-    if( x==1 | x==2 || x==3 || x==4){ //a
+    x = x + 1;
+    if( x==1 || x==2 || x==3 || x==4){
         printf("bingo\n");
     }
     return getint();
 }
-void test(){
-    return 1;
-}
+
 int min(int a, int b, int flag){
     if(flag && a > b){
         return b;
@@ -32,10 +30,8 @@ int max(int a, int b, int flag){
 }
 
 int fib(int x){
-    if(x==1 || x==0){
-        return 1;
-    }
-    //return fib(x-1) + fib(x-2);
+    if(x==1 || x==0)return 1;
+    return fib(x-1) + fib(x-2);
 }
 
 int func0(){
@@ -45,22 +41,19 @@ int func0(){
 int main(){
     printf("hello bingo test\n");
     int p1 = getNumber();
-    int p1;
-    p_no_define = 2;
-    a = 3;
-    static int p2 = b[c-1];
+    static int p2 = 1;
     arr1[1] = p2 * 2 + 3 - a*b[a] + c/3*3;
     ;
     222;
     static int p3 = 1;
-    p3 = min(p1, 2, arr1);
-    p3 = max(min(p1, 2, 1), max(1, 2, 0));
+    p3 = min(p1, 2, 1);
+    p3 = max(min(p1, 2, 1), max(1, 2, 0), 0);
     printf("p3 is %d\n", p3);
     int fib_test = fib(4) + min(fib(2), p1, 1);
     printf("fib_test is %d\n", fib_test);
 
     if(0 && func0() == 1){
-        printf("no here\n", c);
+        printf("no here\n");
     }
     if(c==3 || func0()){
         printf("right here\n");
@@ -71,8 +64,6 @@ int main(){
     }
     if(c==4 || func0() == 1){
         printf("here c should be 6, and your c is %d\n", c);
-        break;
-        continue;
     }
 
     return 0;
