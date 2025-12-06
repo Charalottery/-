@@ -1,24 +1,37 @@
-CC = D:/msys64/mingw64/bin/g++.exe
-CFLAGS = -g -Wall -std=c++17
+# Recursive Makefile for my-compiler
+# Builds all .cpp under src and subdirectories into a single executable
 
-SRCS = main.cpp frontend/lexer/lexer.cpp frontend/parser/Parser.cpp \
-	midend/symbol/SymbolManager.cpp midend/analysis/SemanticAnalyzer.cpp \
-	error/ErrorRecorder.cpp
-TARGET = Compiler.exe
+CXX := g++
+CXXFLAGS := -std=c++17 -O2 -g -Wall -I.
+LDFLAGS :=
 
-.PHONY: all clean
+# Directories to search for .cpp files (relative to this Makefile)
+SRCDIRS := . ./backend ./error ./frontend ./midend ./optimize ./tools ./utils
 
-all: $(TARGET)
+## Use PowerShell to emit relative paths (no drive letters) to avoid Make parsing
+SRC := $(shell powershell -NoProfile -Command "Get-ChildItem -Recurse -Filter '*.cpp' | ForEach-Object { $$p=$$PWD.Path; $$r=$$_.FullName.Substring($$p.Length+1); $$r -replace '\\\\','/' }")
 
-$(TARGET): $(SRCS)
-	$(CC) $(CFLAGS) $(SRCS) -o $(TARGET)
+OUT := Compiler.exe
 
-# Cross-platform clean: use rm on POSIX shells, and cmd del on Windows
-ifeq ($(OS),Windows_NT)
-RM_CMD = cmd /C if exist "$(TARGET)" del /F /Q "$(TARGET)"
-else
-RM_CMD = rm -f $(TARGET)
-endif
+.PHONY: all clean run help print-vars
+
+# Build by passing all .cpp files directly to the linker/driver so no .o files
+# are left behind. This produces a single `Compiler.exe` in the current dir.
+all: $(OUT)
+
+$(OUT): $(SRC)
+	$(CXX) $(CXXFLAGS) -o $@ $^
 
 clean:
-	@$(RM_CMD)
+	@powershell -NoProfile -Command "Remove-Item -LiteralPath '$(OUT)' -Force -ErrorAction SilentlyContinue"
+
+run: all
+	@powershell -NoProfile -Command "& './$(OUT)'"
+
+help: print-vars
+
+print-vars:
+	@echo "SRCDIRS: $(SRCDIRS)"
+	@echo "Found sources:" 
+	@printf "  %s\n" $(SRC)
+	@echo "Output: $(OUT)"
