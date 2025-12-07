@@ -7,6 +7,7 @@
 #include "midend/analysis/SemanticAnalyzer.hpp"
 #include "midend/symbol/SymbolManager.hpp"
 #include "midend/irgen/IRGenerator.hpp"
+#include "backend/MipsGenerator.hpp"
 #include <fstream>
 #include <iostream>
 #include <algorithm>
@@ -35,6 +36,7 @@ int main() {
     std::remove("symbol.txt");
     std::remove("error.txt");
     std::remove("llvm_ir.txt");
+    std::remove("mips.txt");
 
     Lexer lexer(input);
     // Let the lexer produce the full token list itself.
@@ -58,6 +60,7 @@ int main() {
         std::remove("parser.txt");
         std::remove("symbol.txt");
         std::remove("llvm_ir.txt");
+        std::remove("mips.txt");
         return 0;
     }
 
@@ -76,12 +79,15 @@ int main() {
         SymbolTable* rootTable = SymbolManager::GetRoot();
         IRGenerator generator(tree.get(), rootTable);
         generator.generate();
-        
         std::ofstream llvmFile("llvm_ir.txt");
         generator.module->print(llvmFile);
+
+        // Generate MIPS
+        std::ofstream mipsFile("mips.txt");
+        MipsGenerator mipsGen(generator.module, mipsFile);
+        mipsGen.generate();
     }
 
-    // ensure no stale error file
     std::remove("error.txt");
 
     return 0;

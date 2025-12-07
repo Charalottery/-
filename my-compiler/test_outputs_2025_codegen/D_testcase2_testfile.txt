@@ -1,8 +1,0 @@
-﻿// 14, 15
-int func(){ // testcase 14 15
-    return 2;
-}
-int main(){
-    if (0 || func() && 1) printf("1 "); else printf("0 ");
-    return 0;
-}

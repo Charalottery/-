@@ -1,3 +1,6 @@
+@N = constant i32 10
+@a = global [10 x i32] [i32 0, i32 1, i32 2, i32 3, i32 4, i32 5, i32 6, i32 7, i32 8, i32 9]
+
 declare i32 @getint()
 declare i32 @getch()
 declare i32 @getarray(i32* %arg0)
@@ -7,20 +10,205 @@ declare void @putarray(i32 %arg0, i32* %arg1)
 declare void @putstr(i8* %arg0)
 declare void @starttime()
 declare void @stoptime()
-define i32 @main() {
+define i32 @fib(i32 %arg0) {
 entry:
-  %a_addr_0 = alloca i32
-  store i32 0, i32* %a_addr_0
-  %load_a_4 = load i32, i32* %a_addr_0
-  %load_a_5 = load i32, i32* %a_addr_0
-  %tmp_rel_6 = icmp sgt i32 %load_a_5, 5
-  %zext_7 = zext i1 %tmp_rel_6 to i32
-  %tmp_eq_8 = icmp eq i32 %load_a_4, %zext_7
-  br i1 %tmp_eq_8, label %if_true_1, label %if_false_2
+  %i_addr_0 = alloca i32
+  store i32 %arg0, i32* %i_addr_0
+  %load_i_4 = load i32, i32* %i_addr_0
+  %tmp_eq_5 = icmp eq i32 %load_i_4, 1
+  br i1 %tmp_eq_5, label %if_true_1, label %if_false_2
 if_true_1:
-  br label %if_next_3
+  ret i32 1
 if_false_2:
   br label %if_next_3
 if_next_3:
+  %load_i_9 = load i32, i32* %i_addr_0
+  %tmp_eq_10 = icmp eq i32 %load_i_9, 2
+  br i1 %tmp_eq_10, label %if_true_6, label %if_false_7
+if_true_6:
+  ret i32 2
+if_false_7:
+  br label %if_next_8
+if_next_8:
+  %load_i_11 = load i32, i32* %i_addr_0
+  %tmp_12 = sub i32 %load_i_11, 1
+  %call_13 = call i32 @fib(i32 %tmp_12)
+  %load_i_14 = load i32, i32* %i_addr_0
+  %tmp_15 = sub i32 %load_i_14, 2
+  %call_16 = call i32 @fib(i32 %tmp_15)
+  %tmp_17 = add i32 %call_13, %call_16
+  ret i32 %tmp_17
+}
+define i32 @main() {
+entry:
+  %i_addr_0 = alloca i32
+  store i32 2, i32* %i_addr_0
+  %j_addr_1 = alloca i32
+  store i32 5, i32* %j_addr_1
+  %a1_addr_2 = alloca i32
+  store i32 1, i32* %a1_addr_2
+  %a2_addr_3 = alloca i32
+  store i32 2, i32* %a2_addr_3
+  %call_4 = call i32 @getint()
+  store i32 %call_4, i32* %i_addr_0
+  %call_5 = call i32 @getint()
+  store i32 %call_5, i32* %j_addr_1
+  %load_i_6 = load i32, i32* %i_addr_0
+  %load_j_7 = load i32, i32* %j_addr_1
+  %tmp_8 = mul i32 %load_i_6, %load_j_7
+  %neg_9 = sub i32 0, %tmp_8
+  %call_10 = call i32 @fib(i32 4)
+  %tmp_11 = mul i32 %neg_9, %call_10
+  %tmp_12 = add i32 %tmp_11, 0
+  %gep_13 = getelementptr [10 x i32], [10 x i32]* @a, i32 0, i32 1
+  %load_a_14 = load i32, i32* %gep_13
+  %tmp_15 = mul i32 %load_a_14, 1
+  %tmp_16 = add i32 %tmp_12, %tmp_15
+  %tmp_17 = sdiv i32 1, 2
+  %tmp_18 = sub i32 %tmp_16, %tmp_17
+  %tmp_19 = sdiv i32 %tmp_18, 5
+  store i32 %tmp_19, i32* %i_addr_0
+  %tmp_20 = mul i32 7, 5923
+  %tmp_21 = srem i32 %tmp_20, 56
+  %tmp_22 = mul i32 %tmp_21, 57
+  %call_23 = call i32 @fib(i32 5)
+  %tmp_24 = add i32 %call_23, 2
+  %call_25 = call i32 @fib(i32 %tmp_24)
+  %tmp_26 = sub i32 %tmp_22, %call_25
+  %load_a1_27 = load i32, i32* %a1_addr_2
+  %load_a2_28 = load i32, i32* %a2_addr_3
+  %tmp_29 = add i32 %load_a1_27, %load_a2_28
+  %tmp_30 = sdiv i32 89, 2
+  %tmp_31 = mul i32 %tmp_30, 36
+  %tmp_32 = sub i32 %tmp_31, 53
+  %tmp_33 = sdiv i32 %tmp_32, 1
+  %tmp_34 = mul i32 %tmp_33, 6
+  %tmp_35 = sub i32 %tmp_29, %tmp_34
+  %tmp_36 = mul i32 45, 56
+  %tmp_37 = sdiv i32 %tmp_36, 85
+  %tmp_38 = sub i32 %tmp_37, 56
+  %tmp_39 = mul i32 35, 56
+  %tmp_40 = sdiv i32 %tmp_39, 4
+  %tmp_41 = add i32 %tmp_38, %tmp_40
+  %tmp_42 = sub i32 %tmp_41, 9
+  %tmp_43 = mul i32 2, %tmp_42
+  %tmp_44 = sub i32 %tmp_35, %tmp_43
+  %tmp_45 = add i32 %tmp_26, %tmp_44
+  store i32 %tmp_45, i32* %j_addr_1
+  %k_addr_46 = alloca i32
+  %neg_47 = sub i32 0, 6
+  store i32 %neg_47, i32* %k_addr_46
+  %gep_48 = getelementptr [10 x i32], [10 x i32]* @a, i32 0, i32 0
+  %gep_49 = getelementptr [10 x i32], [10 x i32]* @a, i32 0, i32 0
+  %load_a_50 = load i32, i32* %gep_49
+  %load_i_51 = load i32, i32* %i_addr_0
+  %load_i_52 = load i32, i32* %i_addr_0
+  %tmp_53 = mul i32 %load_i_51, %load_i_52
+  %tmp_54 = add i32 %load_a_50, %tmp_53
+  store i32 %tmp_54, i32* %gep_48
+  %gep_55 = getelementptr [10 x i32], [10 x i32]* @a, i32 0, i32 1
+  %gep_56 = getelementptr [10 x i32], [10 x i32]* @a, i32 0, i32 1
+  %load_a_57 = load i32, i32* %gep_56
+  %load_i_58 = load i32, i32* %i_addr_0
+  %load_i_59 = load i32, i32* %i_addr_0
+  %tmp_60 = mul i32 %load_i_58, %load_i_59
+  %tmp_61 = add i32 %load_a_57, %tmp_60
+  store i32 %tmp_61, i32* %gep_55
+  %gep_62 = getelementptr [10 x i32], [10 x i32]* @a, i32 0, i32 2
+  %gep_63 = getelementptr [10 x i32], [10 x i32]* @a, i32 0, i32 2
+  %load_a_64 = load i32, i32* %gep_63
+  %load_i_65 = load i32, i32* %i_addr_0
+  %load_i_66 = load i32, i32* %i_addr_0
+  %tmp_67 = mul i32 %load_i_65, %load_i_66
+  %tmp_68 = add i32 %load_a_64, %tmp_67
+  store i32 %tmp_68, i32* %gep_62
+  %gep_69 = getelementptr [10 x i32], [10 x i32]* @a, i32 0, i32 3
+  %gep_70 = getelementptr [10 x i32], [10 x i32]* @a, i32 0, i32 3
+  %load_a_71 = load i32, i32* %gep_70
+  %load_i_72 = load i32, i32* %i_addr_0
+  %load_i_73 = load i32, i32* %i_addr_0
+  %tmp_74 = mul i32 %load_i_72, %load_i_73
+  %tmp_75 = add i32 %load_a_71, %tmp_74
+  store i32 %tmp_75, i32* %gep_69
+  %gep_76 = getelementptr [10 x i32], [10 x i32]* @a, i32 0, i32 4
+  %gep_77 = getelementptr [10 x i32], [10 x i32]* @a, i32 0, i32 4
+  %load_a_78 = load i32, i32* %gep_77
+  %load_i_79 = load i32, i32* %i_addr_0
+  %load_i_80 = load i32, i32* %i_addr_0
+  %tmp_81 = mul i32 %load_i_79, %load_i_80
+  %tmp_82 = add i32 %load_a_78, %tmp_81
+  store i32 %tmp_82, i32* %gep_76
+  %gep_83 = getelementptr [10 x i32], [10 x i32]* @a, i32 0, i32 5
+  %gep_84 = getelementptr [10 x i32], [10 x i32]* @a, i32 0, i32 5
+  %load_a_85 = load i32, i32* %gep_84
+  %load_i_86 = load i32, i32* %i_addr_0
+  %load_i_87 = load i32, i32* %i_addr_0
+  %tmp_88 = mul i32 %load_i_86, %load_i_87
+  %tmp_89 = add i32 %load_a_85, %tmp_88
+  store i32 %tmp_89, i32* %gep_83
+  %gep_90 = getelementptr [10 x i32], [10 x i32]* @a, i32 0, i32 6
+  %gep_91 = getelementptr [10 x i32], [10 x i32]* @a, i32 0, i32 6
+  %load_a_92 = load i32, i32* %gep_91
+  %load_i_93 = load i32, i32* %i_addr_0
+  %load_i_94 = load i32, i32* %i_addr_0
+  %tmp_95 = mul i32 %load_i_93, %load_i_94
+  %tmp_96 = add i32 %load_a_92, %tmp_95
+  store i32 %tmp_96, i32* %gep_90
+  %gep_97 = getelementptr [10 x i32], [10 x i32]* @a, i32 0, i32 7
+  %gep_98 = getelementptr [10 x i32], [10 x i32]* @a, i32 0, i32 7
+  %load_a_99 = load i32, i32* %gep_98
+  %load_i_100 = load i32, i32* %i_addr_0
+  %load_i_101 = load i32, i32* %i_addr_0
+  %tmp_102 = mul i32 %load_i_100, %load_i_101
+  %tmp_103 = add i32 %load_a_99, %tmp_102
+  store i32 %tmp_103, i32* %gep_97
+  %gep_104 = getelementptr [10 x i32], [10 x i32]* @a, i32 0, i32 8
+  %gep_105 = getelementptr [10 x i32], [10 x i32]* @a, i32 0, i32 8
+  %load_a_106 = load i32, i32* %gep_105
+  %load_i_107 = load i32, i32* %i_addr_0
+  %load_i_108 = load i32, i32* %i_addr_0
+  %tmp_109 = mul i32 %load_i_107, %load_i_108
+  %tmp_110 = add i32 %load_a_106, %tmp_109
+  store i32 %tmp_110, i32* %gep_104
+  %gep_111 = getelementptr [10 x i32], [10 x i32]* @a, i32 0, i32 9
+  %gep_112 = getelementptr [10 x i32], [10 x i32]* @a, i32 0, i32 9
+  %load_a_113 = load i32, i32* %gep_112
+  %load_i_114 = load i32, i32* %i_addr_0
+  %load_i_115 = load i32, i32* %i_addr_0
+  %tmp_116 = mul i32 %load_i_114, %load_i_115
+  %tmp_117 = add i32 %load_a_113, %tmp_116
+  store i32 %tmp_117, i32* %gep_111
+  store i32 0, i32* %i_addr_0
+  br label %for_cond_118
+for_cond_118:
+  %load_i_122 = load i32, i32* %i_addr_0
+  %tmp_rel_123 = icmp slt i32 %load_i_122, 10
+  br i1 %tmp_rel_123, label %for_body_119, label %for_next_121
+for_body_119:
+  %load_i_124 = load i32, i32* %i_addr_0
+  %gep_125 = getelementptr [10 x i32], [10 x i32]* @a, i32 0, i32 %load_i_124
+  %load_a_126 = load i32, i32* %gep_125
+  call void @putint(i32 %load_a_126)
+  call void @putch(i32 44)
+  call void @putch(i32 32)
+  %load_i_130 = load i32, i32* %i_addr_0
+  %tmp_131 = add i32 %load_i_130, 1
+  store i32 %tmp_131, i32* %i_addr_0
+  br label %for_step_120
+for_step_120:
+  br label %for_cond_118
+for_next_121:
+  %load_i_132 = load i32, i32* %i_addr_0
+  %load_j_133 = load i32, i32* %j_addr_1
+  %load_k_134 = load i32, i32* %k_addr_46
+  call void @putch(i32 10)
+  call void @putint(i32 %load_i_132)
+  call void @putch(i32 44)
+  call void @putch(i32 32)
+  call void @putint(i32 %load_j_133)
+  call void @putch(i32 44)
+  call void @putch(i32 32)
+  call void @putint(i32 %load_k_134)
+  call void @putch(i32 10)
   ret i32 0
 }

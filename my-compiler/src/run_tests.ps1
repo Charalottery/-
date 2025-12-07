@@ -88,21 +88,21 @@ foreach ($tf in $testfiles) {
     }
     Pop-Location
 
-    # Read llvm_ir from src
-    $llvmSrc = Join-Path $srcDir "llvm_ir.txt"
-    $llvmContent = ''
-    if (Test-Path $llvmSrc) {
-        $llvmContent = Get-Content -Path $llvmSrc -Raw -ErrorAction SilentlyContinue
-        if ($llvmContent -eq $null) { $llvmContent = '' }
+    # Read mips output from src (new program output)
+    $mipsSrc = Join-Path $srcDir "mips.txt"
+    $mipsContent = ''
+    if (Test-Path $mipsSrc) {
+        $mipsContent = Get-Content -Path $mipsSrc -Raw -ErrorAction SilentlyContinue
+        if ($mipsContent -eq $null) { $mipsContent = '' }
     }
 
     # Create a filesystem-safe case name for output files
     $caseFileSafe = ($header -replace '\s+','_') -replace '[\\/:]','_' -replace '[^\w\-]',''
     if (-not $caseFileSafe) { $caseFileSafe = [System.Guid]::NewGuid().ToString() }
 
-    # Write individual files: <case>_testfile.txt and <case>_llvm_ir.txt
+    # Write individual files: <case>_testfile.txt and <case>_mips.txt
     $testOutPath = Join-Path $outputRoot ("{0}_testfile.txt" -f $caseFileSafe)
-    $llvmOutPath = Join-Path $outputRoot ("{0}_llvm_ir.txt" -f $caseFileSafe)
+    $mipsOutPath = Join-Path $outputRoot ("{0}_mips.txt" -f $caseFileSafe)
 
     # Save original testfile content
     if ($testContent -ne '') {
@@ -111,11 +111,11 @@ foreach ($tf in $testfiles) {
         New-Item -Path $testOutPath -ItemType File -Force | Out-Null
     }
 
-    # Save llvm_ir output
-    if ($llvmContent -ne '') {
-        $llvmContent | Out-File -FilePath $llvmOutPath -Encoding UTF8 -Force
+    # Save mips output
+    if ($mipsContent -ne '') {
+        $mipsContent | Out-File -FilePath $mipsOutPath -Encoding UTF8 -Force
     } else {
-        New-Item -Path $llvmOutPath -ItemType File -Force | Out-Null
+        New-Item -Path $mipsOutPath -ItemType File -Force | Out-Null
     }
 
     # Also write stdout/stderr for debugging convenience

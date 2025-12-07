@@ -1,7 +1,0 @@
-﻿int main() {
-    int b = 20;
-    {
-        int a = b, b = 10;
-    }
-    return 0;
-}
