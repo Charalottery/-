@@ -1,0 +1,15 @@
+// 7
+int a[3] = {1,2,3};
+
+void func1(int b[]) {
+    printf("%d", b[1]);
+}
+
+void func2(int bb[]) {
+    func1(bb);
+}
+
+int main(){
+    func2(a);
+    return 0;
+}

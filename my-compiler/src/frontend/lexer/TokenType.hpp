@@ -17,6 +17,7 @@ enum class TokenType {
     IFTK,
     ELSETK,
     FORTK,
+    WHILETK,
     PRINTFTK,
     RETURNTK,
 
@@ -72,6 +73,7 @@ inline TokenType GetTokenType(const std::string &identifier) {
     if (identifier == "if") return TokenType::IFTK;
     if (identifier == "else") return TokenType::ELSETK;
     if (identifier == "for") return TokenType::FORTK;
+    if (identifier == "while") return TokenType::WHILETK;
     if (identifier == "printf") return TokenType::PRINTFTK;
     if (identifier == "return") return TokenType::RETURNTK;
 

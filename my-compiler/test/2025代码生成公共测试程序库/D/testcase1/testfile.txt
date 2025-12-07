@@ -1,0 +1,11 @@
+// MIPS 10, 12, 13
+int pack(int a, int b, int c, int d, int e, int f) {
+    // 用不同的权重把参数“拼成一个数字”，方便检查顺序
+    return a + 10 * b + 100 * c + 1000 * d + 10000 * e + 100000 * f;
+}
+
+int main() {
+    int x = pack(1, 2, 3, 4, 5, 6);
+    printf("%d\n", x); // expect output: 654321
+    return 0;
+}

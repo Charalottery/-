@@ -5,6 +5,8 @@
 #include "error/ErrorType.hpp"
 #include "frontend/parser/Parser.hpp"
 #include "midend/analysis/SemanticAnalyzer.hpp"
+#include "midend/symbol/SymbolManager.hpp"
+#include "midend/irgen/IRGenerator.hpp"
 #include <fstream>
 #include <iostream>
 #include <algorithm>
@@ -32,6 +34,7 @@ int main() {
     std::remove("parser.txt");
     std::remove("symbol.txt");
     std::remove("error.txt");
+    std::remove("llvm_ir.txt");
 
     Lexer lexer(input);
     // Let the lexer produce the full token list itself.
@@ -54,6 +57,7 @@ int main() {
         std::remove("lexer.txt");
         std::remove("parser.txt");
         std::remove("symbol.txt");
+        std::remove("llvm_ir.txt");
         return 0;
     }
 
@@ -65,6 +69,16 @@ int main() {
     if (tree) {
         std::ofstream pf("parser.txt");
         tree->PostOrderPrint(pf);
+    }
+
+    // Generate LLVM IR
+    if (tree) {
+        SymbolTable* rootTable = SymbolManager::GetRoot();
+        IRGenerator generator(tree.get(), rootTable);
+        generator.generate();
+        
+        std::ofstream llvmFile("llvm_ir.txt");
+        generator.module->print(llvmFile);
     }
 
     // ensure no stale error file

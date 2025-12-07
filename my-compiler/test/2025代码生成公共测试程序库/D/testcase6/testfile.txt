@@ -1,0 +1,8 @@
+int f(){
+	printf("x is 2 ");
+	return 1;
+}
+int main() {
+	printf("test is %d",f());
+	return 0;
+}

@@ -44,6 +44,7 @@ inline std::string TokenTypeToString(TokenType t) {
         case TokenType::RBRACK: return "RBRACK";
         case TokenType::LBRACE: return "LBRACE";
         case TokenType::RBRACE: return "RBRACE";
+        case TokenType::WHILETK: return "WHILETK";
         case TokenType::EOF_T: return "EOF";
         case TokenType::ERROR_T: return "ERROR";
     }

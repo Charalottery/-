@@ -1,0 +1,38 @@
+﻿@main.x_7 = global i32 -10
+
+declare i32 @getint()
+declare i32 @getch()
+declare i32 @getarray(i32* %arg0)
+declare void @putint(i32 %arg0)
+declare void @putch(i32 %arg0)
+declare void @putarray(i32 %arg0, i32* %arg1)
+declare void @putstr(i8* %arg0)
+declare void @starttime()
+declare void @stoptime()
+define i32 @main() {
+entry:
+  %i_addr_0 = alloca i32
+  store i32 0, i32* %i_addr_0
+  store i32 0, i32* %i_addr_0
+  br label %for_cond_1
+for_cond_1:
+  %load_i_5 = load i32, i32* %i_addr_0
+  %tmp_rel_6 = icmp slt i32 %load_i_5, 10
+  br i1 %tmp_rel_6, label %for_body_2, label %for_next_4
+for_body_2:
+  %load_x_8 = load i32, i32* @main.x_7
+  %tmp_9 = add i32 %load_x_8, 2
+  store i32 %tmp_9, i32* @main.x_7
+  %load_x_10 = load i32, i32* @main.x_7
+  call void @putint(i32 %load_x_10)
+  call void @putch(i32 32)
+  br label %for_step_3
+for_step_3:
+  %load_i_13 = load i32, i32* %i_addr_0
+  %tmp_14 = add i32 %load_i_13, 1
+  store i32 %tmp_14, i32* %i_addr_0
+  br label %for_cond_1
+for_next_4:
+  ret i32 0
+}
+

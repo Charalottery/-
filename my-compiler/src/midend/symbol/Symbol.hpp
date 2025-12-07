@@ -2,6 +2,8 @@
 #include <string>
 #include <vector>
 
+class IrValue; // Forward declaration
+
 struct Symbol {
     std::string name;
     std::string typeName; // output type name like "Int", "ConstIntArray", etc.
@@ -15,6 +17,12 @@ struct Symbol {
     bool isBuiltin = false;
     bool isArray = false; // true if symbol is an array (dimension > 0)
     std::vector<bool> paramIsArray; // for function symbols: whether each param is array
+    
+    IrValue* llvmValue = nullptr; // LLVM IR value associated with this symbol
+
+    // Added for constant folding
+    int constVal = 0;
+    std::vector<int> arrayValues;
 
     Symbol() = default;
     Symbol(std::string n, std::string t, bool s = false, int d = 0, bool isConst_ = false, int line_ = -1)

@@ -8,6 +8,8 @@ struct SymbolTable {
     SymbolTable *parent = nullptr;
     std::vector<std::unique_ptr<SymbolTable>> children;
     std::vector<Symbol> symbols; // preserve insertion order
+    
+    mutable int nextChildToVisit = 0; // For traversal
 
     explicit SymbolTable(int id_, SymbolTable *parent_) : id(id_), parent(parent_) {}
 
