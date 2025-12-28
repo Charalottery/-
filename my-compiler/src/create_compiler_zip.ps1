@@ -19,13 +19,11 @@ if (Test-Path $destZip) {
 
 # Candidate items to include (accept both 'back' and 'backend' to be tolerant)
 $items = @(
-    'back',
     'backend',
     'error',
     'frontend',
     'midend',
     'optimize',
-    'utils',
     'CMakeLists.txt',
     'config.json',
     'main.cpp',
