@@ -15,6 +15,7 @@
 #include "../midend/llvm/instr/IcmpInstr.hpp"
 #include "../midend/llvm/instr/ZextInstr.hpp"
 #include "../midend/llvm/instr/TruncInstr.hpp"
+#include "../midend/llvm/instr/PhiInstr.hpp"
 #include "../midend/llvm/value/IrConstantInt.hpp"
 #include "../midend/llvm/value/IrConstantArray.hpp"
 #include "../midend/llvm/type/IrBaseType.hpp"
@@ -26,34 +27,40 @@
 #include <string>
 #include <vector>
 
-class MipsGenerator {
+class MipsGenerator
+{
 public:
-    MipsGenerator(IrModule* module, std::ostream& out);
+    MipsGenerator(IrModule *module, std::ostream &out);
     void generate();
 
 private:
-    IrModule* module;
-    std::ostream& out;
-    
-    // Current function context
-    IrFunction* currentFunction;
-    std::map<IrValue*, int> stackOffsets; // Offset from FP
-    int currentStackSize;
+    IrModule *module;
+    std::ostream &out;
 
-    void visitFunction(IrFunction* func);
-    void visitBasicBlock(IrBasicBlock* bb);
-    void visitInstr(Instr* instr);
+    // Current function context
+    IrFunction *currentFunction;
+    IrBasicBlock *currentBlock;
+    std::map<IrValue *, int> stackOffsets; // Offset from FP
+    int currentStackSize;
+    int phiEdgeCounter = 0;
+
+    void visitFunction(IrFunction *func);
+    void visitBasicBlock(IrBasicBlock *bb);
+    void visitInstr(Instr *instr);
+
+    void emitPhiCopies(IrBasicBlock *from, IrBasicBlock *to);
+    std::string makeEdgeLabel(const std::string &base);
 
     // Helpers
     void emit(std::string instr);
     void emitLabel(std::string label);
-    void loadToRegister(IrValue* val, std::string reg);
-    void storeFromRegister(IrValue* val, std::string reg);
-    int getStackOffset(IrValue* val);
-    int getSize(IrType* type);
-    std::string getLabelName(IrBasicBlock* bb);
-    std::string getFunctionName(IrFunction* func);
-    
+    void loadToRegister(IrValue *val, std::string reg);
+    void storeFromRegister(IrValue *val, std::string reg);
+    int getStackOffset(IrValue *val);
+    int getSize(IrType *type);
+    std::string getLabelName(IrBasicBlock *bb);
+    std::string getFunctionName(IrFunction *func);
+
     // Register names
     const std::string ZERO = "$zero";
     const std::string SP = "$sp";

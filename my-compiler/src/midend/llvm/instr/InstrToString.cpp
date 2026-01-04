@@ -10,123 +10,192 @@
 #include "../instr/GepInstr.hpp"
 #include "../instr/ZextInstr.hpp"
 #include "../instr/TruncInstr.hpp"
+#include "../instr/PhiInstr.hpp"
 #include <sstream>
 
-std::string AluInstr::toString() const {
+std::string AluInstr::toString() const
+{
     std::string opStr;
-    switch (instrType) {
-        case InstrType::ADD: opStr = "add"; break;
-        case InstrType::SUB: opStr = "sub"; break;
-        case InstrType::MUL: opStr = "mul"; break;
-        case InstrType::SDIV: opStr = "sdiv"; break;
-        case InstrType::SREM: opStr = "srem"; break;
-        default: opStr = "unknown"; break;
+    switch (instrType)
+    {
+    case InstrType::ADD:
+        opStr = "add";
+        break;
+    case InstrType::SUB:
+        opStr = "sub";
+        break;
+    case InstrType::MUL:
+        opStr = "mul";
+        break;
+    case InstrType::SDIV:
+        opStr = "sdiv";
+        break;
+    case InstrType::SREM:
+        opStr = "srem";
+        break;
+    default:
+        opStr = "unknown";
+        break;
     }
     return name + " = " + opStr + " " + getOperand(0)->type->toString() + " " + getOperand(0)->name + ", " + getOperand(1)->name;
 }
 
-std::string AllocaInstr::toString() const {
+std::string AllocaInstr::toString() const
+{
     return name + " = alloca " + allocatedType->toString();
 }
 
-LoadInstr::LoadInstr(IrValue* ptr, std::string n) 
-    : Instr(((IrPointerType*)ptr->type)->pointedType, InstrType::LOAD, n) {
+LoadInstr::LoadInstr(IrValue *ptr, std::string n)
+    : Instr(((IrPointerType *)ptr->type)->pointedType, InstrType::LOAD, n)
+{
     addOperand(ptr);
 }
 
-std::string LoadInstr::toString() const {
+std::string LoadInstr::toString() const
+{
     return name + " = load " + type->toString() + ", " + getOperand(0)->type->toString() + " " + getOperand(0)->name;
 }
 
-StoreInstr::StoreInstr(IrValue* val, IrValue* ptr) 
-    : Instr(IrBaseType::getVoid(), InstrType::STORE) {
+StoreInstr::StoreInstr(IrValue *val, IrValue *ptr)
+    : Instr(IrBaseType::getVoid(), InstrType::STORE)
+{
     addOperand(val);
     addOperand(ptr);
 }
 
-std::string StoreInstr::toString() const {
+std::string StoreInstr::toString() const
+{
     return "store " + getOperand(0)->type->toString() + " " + getOperand(0)->name + ", " + getOperand(1)->type->toString() + " " + getOperand(1)->name;
 }
 
-std::string IcmpInstr::toString() const {
+std::string IcmpInstr::toString() const
+{
     std::string condStr;
-    switch (cond) {
-        case IcmpCond::EQ: condStr = "eq"; break;
-        case IcmpCond::NE: condStr = "ne"; break;
-        case IcmpCond::SGT: condStr = "sgt"; break;
-        case IcmpCond::SGE: condStr = "sge"; break;
-        case IcmpCond::SLT: condStr = "slt"; break;
-        case IcmpCond::SLE: condStr = "sle"; break;
+    switch (cond)
+    {
+    case IcmpCond::EQ:
+        condStr = "eq";
+        break;
+    case IcmpCond::NE:
+        condStr = "ne";
+        break;
+    case IcmpCond::SGT:
+        condStr = "sgt";
+        break;
+    case IcmpCond::SGE:
+        condStr = "sge";
+        break;
+    case IcmpCond::SLT:
+        condStr = "slt";
+        break;
+    case IcmpCond::SLE:
+        condStr = "sle";
+        break;
     }
     return name + " = icmp " + condStr + " " + getOperand(0)->type->toString() + " " + getOperand(0)->name + ", " + getOperand(1)->name;
 }
 
-std::string BranchInstr::toString() const {
+std::string BranchInstr::toString() const
+{
     return "br " + getOperand(0)->type->toString() + " " + getOperand(0)->name + ", label %" + getOperand(1)->name + ", label %" + getOperand(2)->name;
 }
 
-std::string JumpInstr::toString() const {
+std::string JumpInstr::toString() const
+{
     return "br label %" + getOperand(0)->name;
 }
 
-std::string CallInstr::toString() const {
+std::string CallInstr::toString() const
+{
     std::stringstream ss;
-    if (!type->isVoid()) {
+    if (!type->isVoid())
+    {
         ss << name << " = ";
     }
     ss << "call " << type->toString() << " " << getOperand(0)->name << "(";
-    for (size_t i = 1; i < operandList.size(); ++i) {
-        if (i > 1) ss << ", ";
+    for (size_t i = 1; i < operandList.size(); ++i)
+    {
+        if (i > 1)
+            ss << ", ";
         ss << getOperand(i)->type->toString() << " " << getOperand(i)->name;
     }
     ss << ")";
     return ss.str();
 }
 
-std::string ReturnInstr::toString() const {
-    if (operandList.empty()) {
+std::string ReturnInstr::toString() const
+{
+    if (operandList.empty())
+    {
         return "ret void";
-    } else {
+    }
+    else
+    {
         return "ret " + getOperand(0)->type->toString() + " " + getOperand(0)->name;
     }
 }
 
-GepInstr::GepInstr(IrValue* ptr, const std::vector<IrValue*>& indices, std::string n) 
-    : Instr(nullptr, InstrType::GEP, n) { // Type needs calculation
+GepInstr::GepInstr(IrValue *ptr, const std::vector<IrValue *> &indices, std::string n)
+    : Instr(nullptr, InstrType::GEP, n)
+{ // Type needs calculation
     addOperand(ptr);
-    for (auto idx : indices) addOperand(idx);
-    
+    for (auto idx : indices)
+        addOperand(idx);
+
     // Calculate type: pointer to element
     // Simplified: assume array or pointer
-    IrType* base = ((IrPointerType*)ptr->type)->pointedType;
+    IrType *base = ((IrPointerType *)ptr->type)->pointedType;
     // If base is array, and we have 2 indices (0, i), result is pointer to element.
     // If base is pointer, and we have 1 index (i), result is pointer to element.
-    
+
     // For now, let's just assume it returns a pointer to something.
     // Ideally we should implement type calculation logic.
     // Hack: if base is array, result is pointer to element type.
-    if (base->isArray()) {
-        type = new IrPointerType(((IrArrayType*)base)->elementType);
-    } else {
+    if (base->isArray())
+    {
+        type = new IrPointerType(((IrArrayType *)base)->elementType);
+    }
+    else
+    {
         type = ptr->type; // Pointer arithmetic keeps same pointer type
     }
 }
 
-std::string GepInstr::toString() const {
+std::string GepInstr::toString() const
+{
     std::stringstream ss;
-    ss << name << " = getelementptr " << ((IrPointerType*)getOperand(0)->type)->pointedType->toString() << ", " 
+    ss << name << " = getelementptr " << ((IrPointerType *)getOperand(0)->type)->pointedType->toString() << ", "
        << getOperand(0)->type->toString() << " " << getOperand(0)->name;
-    
-    for (size_t i = 1; i < operandList.size(); ++i) {
+
+    for (size_t i = 1; i < operandList.size(); ++i)
+    {
         ss << ", " << getOperand(i)->type->toString() << " " << getOperand(i)->name;
     }
     return ss.str();
 }
 
-std::string ZextInstr::toString() const {
+std::string ZextInstr::toString() const
+{
     return name + " = zext " + getOperand(0)->type->toString() + " " + getOperand(0)->name + " to " + type->toString();
 }
 
-std::string TruncInstr::toString() const {
+std::string TruncInstr::toString() const
+{
     return name + " = trunc " + getOperand(0)->type->toString() + " " + getOperand(0)->name + " to " + type->toString();
+}
+
+std::string PhiInstr::toString() const
+{
+    std::stringstream ss;
+    ss << name << " = phi " << type->toString() << " ";
+    // operandList stores [value0, block0, value1, block1, ...]
+    for (size_t i = 0; i + 1 < operandList.size(); i += 2)
+    {
+        if (i > 0)
+            ss << ", ";
+        auto *v = getOperand((int)i);
+        auto *b = dynamic_cast<IrBasicBlock *>(getOperand((int)i + 1));
+        ss << "[ " << (v ? v->name : "0") << ", %" << (b ? b->name : "") << " ]";
+    }
+    return ss.str();
 }
