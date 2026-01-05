@@ -1,0 +1,220 @@
+// SysY 示例：复杂控制流演示
+// 特性：递归、相互递归、嵌套 for/while、break/continue、回溯、早返回、复杂的 if-else 链
+#include <stdio.h>
+int arr[6];
+int global_result;
+
+// 迭代计算斐波那契（有 while 循环）
+int fib(int n)
+{
+    if (n <= 1)
+    {
+        return n;
+    }
+    int a;
+    int b;
+    int i;
+    a = 0;
+    b = 1;
+    i = 2;
+    while (i <= n)
+    {
+        int t;
+        t = a + b;
+        a = b;
+        b = t;
+        i = i + 1;
+    }
+    return b;
+}
+
+// 相互递归示例：互相调用，展示多分支与递归终止
+int mutualA(int n)
+{
+    if (n <= 0)
+    {
+        return 0;
+    }
+    if (n % 3 == 0)
+    {
+        // 如果能被3整除，改为减小并调用 mutualB
+        return mutualB(n - 1) + 1;
+    }
+    else
+    {
+        // 否则按半缩小规模
+        return mutualB(n / 2) + 2;
+    }
+}
+
+int mutualB(int n)
+{
+    if (n <= 1)
+    {
+        return 1;
+    }
+    if (n % 2 == 0)
+    {
+        // 偶数快速返回，展示早返回
+        return n / 2;
+    }
+    // 奇数继续调用 mutualA，形成互相推进的递归链
+    return mutualA(n - 1) + 3;
+}
+
+// 回溯搜索示例：尝试在数组元素范围内选取数使和等于 target
+// 展示嵌套 for、continue、break 和早返回
+int solve_backtrack(int idx, int sum, int target)
+{
+    if (idx == 6)
+    {
+        // 到达末端，检查是否满足目标
+        if (sum == target)
+        {
+            return 1; // 找到一种解
+        }
+        else
+        {
+            return 0;
+        }
+    }
+
+    int i;
+    // 每个位置尝试 0..arr[idx] 的值
+    for (i = 0; i <= arr[idx]; i = i + 1)
+    {
+        // 剪枝：当前和超过目标，后续更大的 i 也会超过，直接 break
+        if (sum + i > target)
+        {
+            break;
+        }
+        // 跳过某个特殊取值（比如2）以演示 continue
+        if (i == 2)
+        {
+            continue;
+        }
+        // 递归尝试下一位；若成功则早返回，避免不必要的搜索
+        if (solve_backtrack(idx + 1, sum + i, target) == 1)
+        {
+            return 1;
+        }
+    }
+    // 否则无解
+    return 0;
+}
+
+// 复杂循环与条件组合示例，计算一个与控制流相关的值
+int complex_calc(int n)
+{
+    int i;
+    int j;
+    int acc;
+    acc = 0;
+
+    // 双重嵌套 for：内层使用 continue/break 以及条件早退出外层
+    for (i = 0; i < n; i = i + 1)
+    {
+        for (j = 0; j < n; j = j + 1)
+        {
+            if ((i * j) % 7 == 0)
+            {
+                // 当某些组合满足条件时，跳过本次内循环迭代
+                j = j + 0; // 占位，演示 continue
+                continue;
+            }
+            acc = acc + (i * j); // 使用按位异或作为混合计算
+            if (acc > 100)
+            {
+                // 若累加值过大，直接退出内层并尝试退出外层（通过设置 i 使外层条件失败）
+                i = n; // 将 i 置为 n，使外层循环在下一检查时结束
+                break;
+            }
+        }
+    }
+
+    // 用 while 循环与复杂分支调整 acc，展示多路分支与嵌套条件
+    j = 0;
+    while (j < 10)
+    {
+        if (j == 3)
+        {
+            j = j + 1;
+            // 跳过一次迭代
+            continue;
+        }
+        else if (j == 7)
+        {
+            // 当 j==7 时做一次重置并直接跳出循环，展示 break
+            acc = acc / 2;
+            break;
+        }
+        else
+        {
+            acc = acc + fib(j); // 调用函数，展示函数调用嵌套
+        }
+        j = j + 1;
+    }
+
+    return acc;
+}
+
+int main()
+{
+    int i;
+    int target;
+    int found;
+    int cval;
+    int final_ans;
+
+    // 初始化 arr：演示 for 循环与数组赋值
+    for (i = 0; i < 6; i = i + 1)
+    {
+        arr[i] = i + 1; // arr = [1,2,3,4,5,6]
+    }
+
+    target = 10;
+
+    // 回溯查找是否存在组合的和等于 target
+    found = solve_backtrack(0, 0, target);
+
+    // 复杂的 if-else 链（类似 switch-case 的行为）
+    if (found == 1)
+    {
+        cval = complex_calc(target);
+    }
+    else if (target % 2 == 0)
+    {
+        // 使用互相递归函数作为备选计算方式
+        cval = mutualA(target);
+    }
+    else
+    {
+        // 计算斐波那契作为默认路径
+        cval = fib(target % 10);
+    }
+
+    // 进一步的混合循环：使用 do-while 风格（通过 while 实现）
+    final_ans = 0;
+    i = 0;
+    while (1)
+    {
+        final_ans = final_ans + (cval & 255); // 与运算演示位操作
+        i = i + 1;
+        if (i >= 5)
+        {
+            break;
+        }
+        // 条件决定是否提前结束计算
+        if (final_ans > 500)
+        {
+            // 早返回 main，演示在主函数中遇到某个条件直接返回（结束程序）
+            return final_ans;
+        }
+    }
+
+    // 将结果存入全局变量，展示函数间状态共享
+    global_result = final_ans + cval;
+    printf("%d", global_result);
+    // 主函数返回：通常 SysY main 返回一个整型状态
+    return 0;
+}

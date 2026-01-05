@@ -18,17 +18,26 @@
 
 int main(int argc, char **argv)
 {
-    bool enableOpt = true; // default: enabled
+    // Optimization switches (managed in main.cpp)
+    // Master switch
+    bool enableOpt = true;
+
+    // Per-pass switches
+    bool enableMem2Reg = true;
+
+    // Optional CLI flags for local debugging (defaults keep judge behavior unchanged)
+    //   --no-opt       : disable all optimizations
+    //   --no-mem2reg   : disable mem2reg pass (requires enableOpt=true)
     for (int i = 1; i < argc; ++i)
     {
         std::string arg = argv[i] ? argv[i] : "";
-        if (arg == "-O0" || arg == "--no-opt" || arg == "--disable-opt")
+        if (arg == "--no-opt")
         {
             enableOpt = false;
         }
-        else if (arg == "-O1" || arg == "-O2" || arg == "--opt" || arg == "--enable-opt")
+        else if (arg == "--no-mem2reg")
         {
-            enableOpt = true;
+            enableMem2Reg = false;
         }
     }
 
@@ -126,7 +135,10 @@ int main(int argc, char **argv)
 
             // Run optimization pipeline (extendable)
             optimize::PassManager pm;
-            pm.addPass(std::make_unique<optimize::Mem2RegPass>());
+            if (enableMem2Reg)
+            {
+                pm.addPass(std::make_unique<optimize::Mem2RegPass>());
+            }
             pm.run(generator.module);
 
             // Dump optimized LLVM

@@ -57,8 +57,18 @@ namespace optimize
 
             auto addSucc = [&](IrBasicBlock *from, IrBasicBlock *to)
             {
-                cfg.succ[from].push_back(to);
-                cfg.pred[to].push_back(from);
+                // Deduplicate edges. Multiple edges from the same block to the same successor
+                // will otherwise create duplicate phi incoming pairs and break later passes/codegen.
+                auto &s = cfg.succ[from];
+                if (std::find(s.begin(), s.end(), to) == s.end())
+                {
+                    s.push_back(to);
+                }
+                auto &p = cfg.pred[to];
+                if (std::find(p.begin(), p.end(), from) == p.end())
+                {
+                    p.push_back(from);
+                }
             };
 
             stack.push_back(entry);
@@ -592,7 +602,10 @@ namespace optimize
                             continue;
                         PhiInstr *phi = itPhi->second;
                         IrValue *incoming = stacks[a].empty() ? makeZero(phi->type) : stacks[a].back();
-                        phi->addIncoming(incoming, bb);
+                        if (phi->getIncomingValue(bb) == nullptr)
+                        {
+                            phi->addIncoming(incoming, bb);
+                        }
                     }
                 }
 

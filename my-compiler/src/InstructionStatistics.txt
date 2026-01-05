@@ -1,6 +1,6 @@
-Division (50.0): 11
-Multiply (3.0): 46
-Jump/Branch (3.0): 381
-Memory (4.0): 984
-Others (1.0): 902
-Final Cycle: 6669.0
+Division (15.0): 0
+Multiply (5.0): 0
+Jump/Branch (2.0): 2
+Memory (3.0): 4
+Others (1.0): 6
+Final Cycle: 22.0
