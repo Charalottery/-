@@ -18,28 +18,36 @@
 
 int main(int argc, char **argv)
 {
-    // Optimization switches (managed in main.cpp)
-    // Master switch
-    bool enableOpt = true;
-
-    // Per-pass switches
-    bool enableMem2Reg = true;
-
-    // Optional CLI flags for local debugging (defaults keep judge behavior unchanged)
-    //   --no-opt       : disable all optimizations
-    //   --no-mem2reg   : disable mem2reg pass (requires enableOpt=true)
-    for (int i = 1; i < argc; ++i)
+    // ===== Compile pipeline switches (managed in main.cpp) =====
+    // Stop after this stage.
+    // - Lexer  -> lexer.txt
+    // - Parser -> lexer.txt + parser.txt
+    // - Symbol -> lexer.txt + parser.txt + symbol.txt
+    // - Llvm   -> lexer.txt + parser.txt + symbol.txt + llvm_ir.txt
+    // - Mips   -> lexer.txt + parser.txt + symbol.txt + llvm_ir.txt + mips.txt
+    enum class CompileStage : int
     {
-        std::string arg = argv[i] ? argv[i] : "";
-        if (arg == "--no-opt")
-        {
-            enableOpt = false;
-        }
-        else if (arg == "--no-mem2reg")
-        {
-            enableMem2Reg = false;
-        }
-    }
+        Lexer = 0,
+        Parser = 1,
+        Symbol = 2,
+        Llvm = 3,
+        Mips = 4,
+    };
+
+    const CompileStage stopAfter = CompileStage::Mips;
+
+    // ===== Optimization switches (managed in main.cpp) =====
+    // Only relevant when stopAfter == Mips.
+    const bool enableOpt = true;     // master switch
+    const bool enableMem2Reg = true; // per-pass switch
+
+    (void)argc;
+    (void)argv;
+
+    auto stageAtLeast = [&](CompileStage s) -> bool
+    {
+        return static_cast<int>(stopAfter) >= static_cast<int>(s);
+    };
 
     // read source from testfile.txt in current directory
     const char *infile = "testfile.txt";
@@ -73,22 +81,9 @@ int main(int argc, char **argv)
     // Let the lexer produce the full token list itself.
     lexer.GenerateTokenList();
 
-    // build token stream and parse
-    TokenStream ts(lexer.GetTokenList());
-    Parser parser(ts);
-    auto tree = parser.ParseCompUnit();
-
-    // run semantic analysis (build symbol table) and optionally dump symbol.txt
-    midend::SemanticAnalyzer::SetDumpSymbols(true);
-    if (tree)
-        midend::SemanticAnalyzer::Analyze(tree.get());
-
-    // After semantic analysis, if semantic errors were recorded write them to error.txt
-    if (ErrorRecorder::HasErrors())
+    auto dumpErrorOnlyAndExit = [&]() -> int
     {
-        // on error: only emit error.txt
         ErrorRecorder::DumpErrors("error.txt");
-        // ensure other outputs are not present
         std::remove("lexer.txt");
         std::remove("parser.txt");
         std::remove("symbol.txt");
@@ -99,13 +94,120 @@ int main(int argc, char **argv)
         std::remove("mips_before.txt");
         std::remove("mips_after.txt");
         return 0;
+    };
+
+    // Stage checkpoint: Lexer
+    if (stopAfter == CompileStage::Lexer)
+    {
+        if (ErrorRecorder::HasErrors())
+        {
+            // only lexical-stage errors are available here
+            return dumpErrorOnlyAndExit();
+        }
+
+        std::ofstream lf("lexer.txt");
+        for (const auto &t : lexer.GetTokenList())
+        {
+            if (t.type == TokenType::EOF_T)
+                continue;
+            lf << t << "\n";
+        }
+        std::remove("error.txt");
+        return 0;
     }
 
-    // no errors: emit lexer and parser outputs and keep symbol.txt (if produced)
+    // build token stream and parse
+    TokenStream ts(lexer.GetTokenList());
+    Parser parser(ts);
+    auto tree = parser.ParseCompUnit();
+
+    // Stage checkpoint: Parser
+    if (stopAfter == CompileStage::Parser)
+    {
+        // At parser stage, output *all* errors detected so far (lexer + parser).
+        if (ErrorRecorder::HasErrors())
+        {
+            return dumpErrorOnlyAndExit();
+        }
+
+        {
+            std::ofstream lf("lexer.txt");
+            for (const auto &t : lexer.GetTokenList())
+            {
+                if (t.type == TokenType::EOF_T)
+                    continue;
+                lf << t << "\n";
+            }
+        }
+        if (tree)
+        {
+            std::ofstream pf("parser.txt");
+            tree->PostOrderPrint(pf);
+        }
+        std::remove("error.txt");
+        return 0;
+    }
+
+    // Stage checkpoint: Symbol
+    // Match download behavior: still run semantic analysis even if lexer/parser already recorded errors.
+    if (stopAfter == CompileStage::Symbol)
+    {
+        midend::SemanticAnalyzer::SetDumpSymbols(true);
+        if (tree)
+            midend::SemanticAnalyzer::Analyze(tree.get());
+
+        if (ErrorRecorder::HasErrors())
+        {
+            return dumpErrorOnlyAndExit();
+        }
+
+        // No errors: emit lexer.txt + parser.txt; SemanticAnalyzer already emitted symbol.txt.
+        {
+            std::ofstream lf("lexer.txt");
+            for (const auto &t : lexer.GetTokenList())
+            {
+                if (t.type == TokenType::EOF_T)
+                    continue;
+                lf << t << "\n";
+            }
+        }
+        if (tree)
+        {
+            std::ofstream pf("parser.txt");
+            tree->PostOrderPrint(pf);
+        }
+
+        std::remove("error.txt");
+        return 0;
+    }
+
+    // For later stages, do not continue if lexer/parser already reported errors.
+    if (ErrorRecorder::HasErrors())
+    {
+        return dumpErrorOnlyAndExit();
+    }
+
+    // run semantic analysis (build symbol table) and optionally dump symbol.txt
+    midend::SemanticAnalyzer::SetDumpSymbols(stageAtLeast(CompileStage::Symbol));
+    if (tree)
+        midend::SemanticAnalyzer::Analyze(tree.get());
+
+    // After semantic analysis, if errors were recorded write only error.txt
+    if (ErrorRecorder::HasErrors())
+    {
+        return dumpErrorOnlyAndExit();
+    }
+
+    // no errors so far: emit lexer and parser outputs
+    // (symbol.txt is emitted by SemanticAnalyzer when enabled)
     {
         std::ofstream lf("lexer.txt");
         for (const auto &t : lexer.GetTokenList())
+        {
+            if (t.type == TokenType::EOF_T)
+                continue;
             lf << t << "\n";
+        }
     }
     if (tree)
     {
@@ -119,6 +221,16 @@ int main(int argc, char **argv)
         SymbolTable *rootTable = SymbolManager::GetRoot();
         IRGenerator generator(tree.get(), rootTable);
         generator.generate();
+
+        if (stopAfter == CompileStage::Llvm)
+        {
+            std::ofstream llvmFile("llvm_ir.txt");
+            generator.module->print(llvmFile);
+            std::remove("error.txt");
+            return 0;
+        }
+
+        // stopAfter == Mips
 
         if (enableOpt)
         {
